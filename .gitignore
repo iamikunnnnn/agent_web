@@ -6,3 +6,5 @@
 /data_test_path
 /user_cache
 /ml_models
+
+__pycache__/
