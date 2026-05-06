@@ -6,5 +6,7 @@
 /data_test_path
 /user_cache
 /ml_models
+.secrets.baseline
+.python-version
 
 __pycache__/
