@@ -1,0 +1,171 @@
+services:
+  data-mcp:
+    image: mcr.microsoft.com/playwright/python:v1.55.0-noble
+    working_dir: /app
+    command: >
+      bash -lc "python -m pip install -r requirements.txt &&
+      python data_mcp_main.py"
+    env_file:
+      - .env
+    volumes:
+      - .:/app
+    ports:
+      - "8085:8085"
+    healthcheck:
+      test:
+        - CMD
+        - python
+        - -c
+        - import socket,sys; s=socket.socket(); s.settimeout(2); s.connect(("127.0.0.1", 8085)); s.close()
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 20s
+    restart: unless-stopped
+
+  docx-use-mcp:
+    image: mcr.microsoft.com/playwright/python:v1.55.0-noble
+    working_dir: /app
+    command: >
+      bash -lc "python -m pip install -r requirements.txt &&
+      python docx_use_mcp_main.py"
+    env_file:
+      - .env
+    environment:
+      MCP_TRANSPORT: streamable-http
+      MCP_HOST: 0.0.0.0
+      MCP_PORT: "8008"
+    volumes:
+      - .:/app
+    ports:
+      - "8008:8008"
+    healthcheck:
+      test:
+        - CMD
+        - python
+        - -c
+        - import socket,sys; s=socket.socket(); s.settimeout(2); s.connect(("127.0.0.1", 8008)); s.close()
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 20s
+    restart: unless-stopped
+
+  browser-mcp:
+    image: mcr.microsoft.com/playwright/python:v1.55.0-noble
+    working_dir: /app
+    command: >
+      bash -lc "python -m pip install -r requirements.txt &&
+      python browser_mcp_main.py"
+    env_file:
+      - .env
+    environment:
+      WDM_HOST: 0.0.0.0
+      WDM_PORT: "8010"
+      WDM_HEADLESS: "true"
+    volumes:
+      - .:/app
+    ports:
+      - "8010:8010"
+    healthcheck:
+      test:
+        - CMD
+        - python
+        - -c
+        - from urllib.request import urlopen; import sys; sys.exit(0 if urlopen("http://127.0.0.1:8010/health").status == 200 else 1)
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 30s
+    restart: unless-stopped
+
+  repo-monitor-mcp:
+    image: mcr.microsoft.com/playwright/python:v1.55.0-noble
+    working_dir: /app
+    command: >
+      bash -lc "python -m pip install -r requirements.txt &&
+      python -m server.repo_monitor_mcp.main"
+    env_file:
+      - .env
+    environment:
+      REPO_MONITOR_MCP_URL: http://repo-monitor-mcp:8012/mcp
+      REPO_MONITOR_DB_PATH: /app/user_cache/repo_monitor.db
+      REPO_CLONE_ROOT: /app/user_cache/repos
+      DEFAULT_SYNC_INTERVAL: "3600"
+      MAX_RETRY_COUNT: "3"
+    volumes:
+      - .:/app
+    ports:
+      - "8012:8012"
+    healthcheck:
+      test:
+        - CMD
+        - python
+        - -c
+        - from urllib.request import urlopen; import sys; sys.exit(0 if urlopen("http://127.0.0.1:8012/health").status == 200 else 1)
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 20s
+    restart: unless-stopped
+
+  computer-mcp:
+    image: mcr.microsoft.com/playwright/python:v1.55.0-noble
+    working_dir: /app
+    command: >
+      bash -lc "python -m pip install -r requirements.txt &&
+      python -m server.computer_mcp.main"
+    env_file:
+      - .env
+    environment:
+      COMPUTER_MCP_URL: http://computer-mcp:8013/mcp
+      WDM_URL: http://browser-mcp:8010
+    volumes:
+      - .:/app
+    ports:
+      - "8013:8013"
+    depends_on:
+      browser-mcp:
+        condition: service_healthy
+    healthcheck:
+      test:
+        - CMD
+        - python
+        - -c
+        - from urllib.request import urlopen; import sys; sys.exit(0 if urlopen("http://127.0.0.1:8013/health").status == 200 else 1)
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 20s
+    restart: unless-stopped
+
+  app:
+    image: mcr.microsoft.com/playwright/python:v1.55.0-noble
+    working_dir: /app
+    command: >
+      bash -lc "python -m pip install -r requirements.txt &&
+      python main.py"
+    env_file:
+      - .env
+    environment:
+      DATA_MCP_URL: http://data-mcp:8085/mcp
+      DOCX_USE_MCP_URL: http://docx-use-mcp:8008/mcp
+      WDM_URL: http://browser-mcp:8010
+      REPO_MONITOR_MCP_URL: http://repo-monitor-mcp:8012/mcp
+      COMPUTER_MCP_URL: http://computer-mcp:8013/mcp
+    volumes:
+      - .:/app
+    ports:
+      - "8005:8005"
+    depends_on:
+      data-mcp:
+        condition: service_healthy
+      docx-use-mcp:
+        condition: service_healthy
+      browser-mcp:
+        condition: service_healthy
+      repo-monitor-mcp:
+        condition: service_healthy
+      computer-mcp:
+        condition: service_healthy
+    restart: unless-stopped

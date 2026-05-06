@@ -1,0 +1,8 @@
+/db/
+/.env
+/try*.py
+/user_cache/ml_models/
+/user_cache/user_cache/github_repo_reader_clone
+/data_test_path
+/user_cache
+/ml_models

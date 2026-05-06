@@ -1,0 +1,11 @@
+# ruff.toml
+line-length = 88
+
+[lint]
+select = [
+    "E",   # pycodestyle 错误（缩进、空格等）
+    "F",   # pyflakes（未使用变量、未定义变量等）
+    "I",   # isort（import 排序）
+    "W",   # pycodestyle 警告
+]
+ignore = []
