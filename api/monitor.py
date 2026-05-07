@@ -8,9 +8,8 @@ from datetime import date, datetime, timedelta, timezone
 from typing import Any, Awaitable, Callable
 
 import httpx
-from agno.os.auth import get_authentication_dependency
 from agno.utils.log import logger
-from fastapi import Depends, FastAPI
+from fastapi import FastAPI
 from fastapi.responses import Response
 from prometheus_client import CollectorRegistry, Counter, Gauge, generate_latest
 from prometheus_client.exposition import CONTENT_TYPE_LATEST
@@ -854,9 +853,8 @@ def setup_prometheus_monitoring(
         state=state,
         collectors=collectors,
     )
-    auth_dep = get_authentication_dependency(getattr(agent_os, "settings", None))
 
-    @app.get(endpoint, include_in_schema=True, tags=["monitoring"], dependencies=[Depends(auth_dep)])
+    @app.get(endpoint, include_in_schema=True, tags=["monitoring"])
     async def prom_metrics() -> Response:
         """
         Prometheus 指标抓取端点。
