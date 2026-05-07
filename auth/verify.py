@@ -1,10 +1,6 @@
 from __future__ import annotations
 
-from typing import Any
-
-import httpx
 import jwt
-from jwt import PyJWKClient
 
 from auth.config import AuthConfig
 from auth.model import TokenPayload
@@ -14,21 +10,11 @@ class InvalidTokenError(Exception):
     pass
 
 
-_jwks_client_cache: PyJWKClient | None = None
-
-
-def _get_jwks_client() -> PyJWKClient:
-    global _jwks_client_cache
-    if _jwks_client_cache is None:
-        _jwks_client_cache = PyJWKClient(AuthConfig.jwks_url, cache_keys=True)
-    return _jwks_client_cache
-
-
-_ALGORITHMS = ["HS256", "RS256"]
+_ALGORITHM = "HS256"
 
 
 def verify_token(token: str) -> TokenPayload:
-    """Verify a Supabase JWT and return a TokenPayload."""
+    """Verify a Supabase JWT (HS256) and return a TokenPayload."""
     if not token or not token.strip():
         raise InvalidTokenError("Token is empty")
 
@@ -37,13 +23,12 @@ def verify_token(token: str) -> TokenPayload:
         raise InvalidTokenError("Token is malformed")
 
     try:
-        jwks_client = _get_jwks_client()
-        signing_key = jwks_client.get_signing_key_from_jwt(token)
         payload = jwt.decode(
             token,
-            signing_key.key,
-            algorithms=_ALGORITHMS,
+            AuthConfig.SUPABASE_JWT_SECRET,
+            algorithms=[_ALGORITHM],
             audience="authenticated",
+            issuer=f"{AuthConfig.SUPABASE_URL}/auth/v1",
             options={"require": ["exp", "sub", "iss"]},
         )
     except jwt.ExpiredSignatureError as e:
