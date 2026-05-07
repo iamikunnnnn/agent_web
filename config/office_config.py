@@ -19,7 +19,7 @@ def _as_bool(value: str | None, default: bool) -> bool:
 
 
 def get_office_paths() -> dict[str, Path]:
-    base_dir = Path(os.getenv("OFFICE_BASE_DIR", _project_root() / "docs" / "office")).expanduser()
+    base_dir = Path(os.getenv("OFFICE_BASE_DIR", _project_root() / "user_cache" / "office")).expanduser()
     input_dir = Path(os.getenv("OFFICE_INPUT_DIR", base_dir / "input")).expanduser()
     output_dir = Path(os.getenv("OFFICE_OUTPUT_DIR", base_dir / "output")).expanduser()
 

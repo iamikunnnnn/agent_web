@@ -1,9 +1,10 @@
 import mimetypes
+import os
 from pathlib import Path
 
 from markitdown import MarkItDown
 
-WORKSPACE_ROOT = "./user_cache/workspace"
+WORKSPACE_ROOT = Path(os.getenv("DATA_UPLOAD_DIR", "./user_cache/workspace"))
 mimetypes.add_type("text/md", ".md")
 
 markItDown = MarkItDown(enable_plugins=False)
@@ -52,7 +53,7 @@ class WorkspaceManager:
         """
         if workspace_uri.startswith("workspace://"):
             relative_path = workspace_uri.removeprefix("workspace://")
-            return WORKSPACE_ROOT / relative_path
+            return (WORKSPACE_ROOT / relative_path).resolve()
         else:
             raise ValueError(f"Unsupported URI scheme in: {workspace_uri}")
 

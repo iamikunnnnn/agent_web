@@ -1,11 +1,12 @@
 from __future__ import annotations
 
-from starlette.middleware.base import BaseHTTPMiddleware
-from fastapi.responses import JSONResponse
 from fastapi import Request
+from fastapi.responses import JSONResponse
+from agno.utils.log import logger
+from starlette.middleware.base import BaseHTTPMiddleware
 
-from auth.model import TokenPayload, CurrentUser
-from auth.verify import verify_token, InvalidTokenError
+from auth.model import CurrentUser, TokenPayload
+from auth.verify import InvalidTokenError, verify_token
 
 PUBLIC_PATHS: frozenset[str] = frozenset({
     "/",
@@ -26,12 +27,12 @@ def _is_public_path(path: str) -> bool:
 
 
 def _sync_user_to_db(payload: TokenPayload) -> None:
-    """Sync user to local DB on login. Non-blocking — errors are logged, not raised."""
+    """将登录用户同步到本地用户表。"""
     try:
         import psycopg
-        from config.db_config import Config
         from auth.db import upsert_user
         from auth.model import LocalUser
+        from config.db_config import Config
 
         db_url = "{}://{}{}@{}:{}/{}".format(
             Config.DB_DRIVER, Config.DB_USER,
@@ -45,8 +46,7 @@ def _sync_user_to_db(payload: TokenPayload) -> None:
             )
             upsert_user(conn, user)
     except Exception:
-        import logging
-        logging.getLogger(__name__).warning("Failed to sync user to local DB", exc_info=True)
+        logger.warning("同步认证用户到本地数据库失败，但不会中断当前请求", exc_info=True)
 
 
 class JWTMiddleware(BaseHTTPMiddleware):
@@ -56,7 +56,7 @@ class JWTMiddleware(BaseHTTPMiddleware):
 
         auth = request.headers.get("Authorization")
         if not auth or not auth.startswith("Bearer "):
-            return JSONResponse(status_code=401, content={"detail": "Missing token"})
+            return JSONResponse(status_code=401, content={"detail": "缺少 Bearer Token"})
 
         token = auth.removeprefix("Bearer ").strip()
 
@@ -71,7 +71,10 @@ class JWTMiddleware(BaseHTTPMiddleware):
             scopes=payload.scopes,
         )
         request.state.user = current_user
+        request.state.user_id = current_user.user_id
 
         _sync_user_to_db(payload)
+
+        logger.info(f"鉴权通过，已注入 user_id 到请求上下文: user_id={current_user.user_id} path={request.url.path}")
 
         return await call_next(request)

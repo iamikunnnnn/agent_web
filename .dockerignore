@@ -1,0 +1,17 @@
+.git
+.idea
+.pytest_cache
+__pycache__
+*.pyc
+*.pyo
+*.pyd
+.venv
+venv
+user_cache
+db
+tests
+docs
+server/meta_mcp
+server/web_driver_monitor
+server/repo_monitor_mcp
+server/computer_mcp

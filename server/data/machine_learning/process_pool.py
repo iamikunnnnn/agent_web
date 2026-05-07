@@ -32,7 +32,7 @@ def submit_train_task(
     random_state: int = 42,
     use_bayes_search: bool = False,
     bayes_iter: int = 5,
-    save_dir: str = "./user_cache/ml_models",
+    save_dir: Optional[str] = None,
     save_model: bool = True,
     max_workers: Optional[int] = None,
 ) -> Future:

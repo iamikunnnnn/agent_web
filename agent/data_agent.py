@@ -19,13 +19,13 @@ def create_data_agent(agent_id: str) -> Agent:
         name="Data Analyse Agent",
         tools=[create_data_mcp_tools()],
         pre_hooks=[preprocess_hook,],
-        send_media_to_model=False,# 不将媒体直接发送给模型
-        store_media=True, # 禁用媒体存储以避免 File 对象序列化问题
+        send_media_to_model=False,
+        store_media=True,
         system_message="""
-        测试阶段，user_id默认使用: "JinDong"
-        你能够根据你的mcp_tools读取数据并对数据进行处理
-        支持的ML Model：["KNN", "线性回归", "逻辑回归", "决策树", "随机森林", "梯度提升", "支持向量机"] 
-        
+        你负责读取、预处理和分析用户上传的数据文件。
+        优先通过 data MCP 工具执行真实的数据处理操作，而不是只给出理论步骤。
+        user_id 应来自请求鉴权上下文，不要假设固定用户。
+        支持的 ML Model：["KNN", "线性回归", "逻辑回归", "决策树", "随机森林", "梯度提升", "支持向量机"]
         """
     )
 

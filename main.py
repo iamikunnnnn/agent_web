@@ -1,21 +1,33 @@
 import asyncio
+import os
 
 import uvicorn
-# todo 后续可以在系统中加上用户系统，加上鉴权功能，试试 supabase
-# todo 把meta_mcp加到docker-compose,然后可以把clone来的meta_mcp删掉了
+from agno.utils.log import log_info
 
-# todo 思考data_agent的数据到底是用本地的还是数据库软链，还是都要？
-# todo 添加pdf_agent
+
+def _get_bool_env(name: str, default: bool) -> bool:
+    raw = os.getenv(name)
+    if raw is None:
+        return default
+    return raw.strip().lower() in {"1", "true", "yes", "y", "on"}
+
+
 if hasattr(asyncio, "WindowsSelectorEventLoopPolicy"):
     asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
-if __name__ == '__main__':
 
+
+if __name__ == '__main__':
+    host = os.getenv("APP_HOST", "0.0.0.0")
+    port = int(os.getenv("APP_PORT", "8005"))
+    reload_enabled = _get_bool_env("UVICORN_RELOAD", False)
+    log_level = os.getenv("UVICORN_LOG_LEVEL", "info")
+
+    log_info(f"准备启动主应用，监听地址: {host}:{port}")
     uvicorn.run(
-        "api.main:app",  # 使用导入字符串而不是应用实例
-        host="0.0.0.0",  # 允许外部访问
-        port=8005,
-        reload=True,
-        log_level="debug",
+        "api.main:app",
+        host=host,
+        port=port,
+        reload=reload_enabled,
+        log_level=log_level,
         access_log=True,
     )
-

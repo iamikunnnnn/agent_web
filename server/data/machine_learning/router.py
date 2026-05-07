@@ -1,16 +1,17 @@
 import asyncio
 from typing import Any, Dict, List, Optional, Union
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel
 
+from server.data.request_context import resolve_request_user_id
 from server.data.machine_learning.process_pool import submit_train_task
 
 ml_router = APIRouter(prefix="/ml", tags=["Machine_Learning"])
 
 
 class TrainModelRequest(BaseModel):
-    user_id: str
+    user_id: Optional[str] = None
     model_name: str
     X_columns: List[str]
     y_column: Union[str, List[str]]
@@ -20,18 +21,19 @@ class TrainModelRequest(BaseModel):
     random_state: int = 42
     use_bayes_search: bool = False
     bayes_iter: int = 5
-    save_dir: str = "./user_cache/ml_models"
+    save_dir: Optional[str] = None
     save_model: bool = True
 
 
 @ml_router.post("/train")
-async def api_train_model(payload: TrainModelRequest):
+async def api_train_model(request: Request, payload: TrainModelRequest):
     """
     训练模型
     """
+    user_id = resolve_request_user_id(request, payload.user_id)
     try:
         future = submit_train_task(
-            user_id=payload.user_id,
+            user_id=user_id,
             model_name=payload.model_name,
             X_columns=payload.X_columns,
             y_column=payload.y_column,

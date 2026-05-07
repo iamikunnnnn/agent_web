@@ -15,12 +15,14 @@ _ALGORITHM = "HS256"
 
 def verify_token(token: str) -> TokenPayload:
     """Verify a Supabase JWT (HS256) and return a TokenPayload."""
+    AuthConfig.validate()
+
     if not token or not token.strip():
-        raise InvalidTokenError("Token is empty")
+        raise InvalidTokenError("Token 为空")
 
     parts = token.split(".")
     if len(parts) != 3:
-        raise InvalidTokenError("Token is malformed")
+        raise InvalidTokenError("Token 格式不正确")
 
     try:
         payload = jwt.decode(
@@ -32,9 +34,9 @@ def verify_token(token: str) -> TokenPayload:
             options={"require": ["exp", "sub", "iss"]},
         )
     except jwt.ExpiredSignatureError as e:
-        raise InvalidTokenError("Token has expired") from e
+        raise InvalidTokenError("Token 已过期") from e
     except jwt.InvalidTokenError as e:
-        raise InvalidTokenError(f"Invalid token: {e}") from e
+        raise InvalidTokenError(f"Token 校验失败: {e}") from e
 
     return TokenPayload(
         sub=payload["sub"],

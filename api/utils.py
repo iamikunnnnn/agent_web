@@ -1,9 +1,5 @@
-# todo 待agno的registry功能完善后，不必这么麻烦，可使用registry进行更完美的管理
-
 from agno.agent import Agent
 from agno.memory import MemoryManager
-from agno.tools.file import FileTools
-from agno.tools.python import PythonTools
 
 from config.db_config import create_base_db, create_knowledge
 from config.model_config import get_ai_model
@@ -39,15 +35,21 @@ def _process_agent_tool_entrypoints(agent: Agent):
 
 def set_default_config_to_agent(agent: Agent):
     # unified config
-    if isinstance(agent,Agent):
+    if isinstance(agent, Agent):
         agent.db = create_base_db(agent.id)
         # 如果 model 为 None 或是框架默认的 OpenAIChat(id="gpt-4o")，替换为系统的 get_ai_model()
         if not agent.model or (type(agent.model).__name__ == "OpenAIChat" and agent.model.id == "gpt-4o"):
             agent.model = get_ai_model()
-        agent.memory_manager = agent.memory_manager or MemoryManager(model=get_ai_model(model_type="siliconflow"), db=agent.db,debug_mode=False)
-        agent.knowledge = create_knowledge(id=agent.id,
-                                            name=agent.id,
-                                            description=f"Knowledge base for {agent.id}")
+        agent.memory_manager = agent.memory_manager or MemoryManager(
+            model=get_ai_model(model_type="siliconflow"),
+            db=agent.db,
+            debug_mode=False,
+        )
+        agent.knowledge = create_knowledge(
+            id=agent.id,
+            name=agent.id,
+            description=f"Knowledge base for {agent.id}",
+        )
 
         # not default config
         agent.stream_intermediate_steps = True
@@ -64,8 +66,6 @@ def set_default_config_to_agent(agent: Agent):
         agent.add_datetime_to_context = True
         agent.debug_mode = True
         agent.stream = True
-        agent.tools = agent.tools or []
-        agent.tools.extend([FileTools(),PythonTools()])
 
         # Process tool entrypoints to ensure descriptions are extracted from docstrings
         _process_agent_tool_entrypoints(agent)

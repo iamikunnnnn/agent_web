@@ -13,6 +13,6 @@ class AuthConfig:
     @classmethod
     def validate(cls) -> None:
         if not cls.SUPABASE_URL:
-            raise ValueError("SUPABASE_URL is required")
+            raise ValueError("缺少环境变量 SUPABASE_URL")
         if not cls.SUPABASE_JWT_SECRET:
-            raise ValueError("SUPABASE_JWT_SECRET is required")
+            raise ValueError("缺少环境变量 SUPABASE_JWT_SECRET")

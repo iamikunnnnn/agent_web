@@ -15,10 +15,12 @@
 import inspect
 import os
 from datetime import datetime
+from pathlib import Path
 from typing import Any, Dict, Optional, Sequence, Tuple, Union
 
 import joblib
 import pandas as pd
+from agno.utils.log import logger
 from sklearn.ensemble import (
     GradientBoostingClassifier,
     GradientBoostingRegressor,
@@ -67,6 +69,36 @@ MODEL_DICT_CLASSIFICATION: Dict[str, Any] = {
     "梯度提升分类": GradientBoostingClassifier,
     "支持向量机分类": SVC,
 }
+
+
+def _safe_user_segment(user_id: Union[int, str]) -> str:
+    raw = str(user_id).strip()
+    if not raw:
+        return "anonymous"
+    return "".join(ch if ch.isalnum() or ch in {"-", "_"} else "_" for ch in raw)
+
+
+def _resolve_model_root() -> Path:
+    return Path(os.getenv("ML_MODEL_DIR", "./user_cache/ml_models")).expanduser().resolve()
+
+
+def _resolve_model_save_dir(user_id: Union[int, str], save_dir: Optional[str]) -> Path:
+    model_root = _resolve_model_root()
+    model_root.mkdir(parents=True, exist_ok=True)
+
+    if save_dir:
+        requested = Path(save_dir).expanduser()
+        candidate = requested.resolve() if requested.is_absolute() else (model_root / requested).resolve()
+    else:
+        candidate = (model_root / _safe_user_segment(user_id)).resolve()
+
+    try:
+        candidate.relative_to(model_root)
+    except ValueError as exc:
+        raise ValueError("模型保存目录必须位于 ML_MODEL_DIR 指定的根目录内") from exc
+
+    candidate.mkdir(parents=True, exist_ok=True)
+    return candidate
 
 
 def _resolve_mode(mode: str) -> str:
@@ -233,7 +265,7 @@ def train_model_once(
     random_state: int = 42,
     use_bayes_search: bool = False,
     bayes_iter: int = 5,
-    save_dir: str = "./user_cache/ml_models",
+    save_dir: Optional[str] = None,
     save_model: bool = True,
 ) -> Dict[str, Any]:
     """
@@ -289,11 +321,12 @@ def train_model_once(
 
     model_path: Optional[str] = None
     if save_model:
-        os.makedirs(save_dir, exist_ok=True)
+        resolved_save_dir = _resolve_model_save_dir(user_id=user_id, save_dir=save_dir)
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
         filename = f"{model_name}_{timestamp}.joblib"
-        model_path = os.path.join(save_dir, filename)
+        model_path = str((resolved_save_dir / filename).resolve())
         joblib.dump(model, model_path)
+        logger.info(f"模型训练完成并已保存: user_id={user_id} model_name={model_name} model_path={model_path}")
 
     return {
         "user_id": str(user_id),
