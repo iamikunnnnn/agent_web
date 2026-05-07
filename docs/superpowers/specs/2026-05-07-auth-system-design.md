@@ -123,16 +123,140 @@ JWT verification uses Supabase's JWKS endpoint derived from `SUPABASE_URL`. No J
 
 ## Frontend Contract
 
-Frontend will:
-1. Use Supabase JS SDK for login/signup/OAuth
-2. Attach `Authorization: Bearer <token>` header on every API call
-3. Read user profile from Supabase auth state
-4. Read business data (usage, config) from local API
+### 1. Supabase JS SDK 初始化
 
-Token payload fields frontend should expect:
-- `sub`: user_id (UUID string)
-- `email`: user email
-- `role`: "authenticated"
+```javascript
+import { createClient } from '@supabase/supabase-js'
+
+const supabase = createClient(
+  'https://your-project.supabase.co',  // 对应后端 SUPABASE_URL
+  'your-anon-key'                       // 对应后端 SUPABASE_ANON_KEY
+)
+```
+
+### 2. 登录 / 注册
+
+```javascript
+// 邮箱密码注册
+const { data, error } = await supabase.auth.signUp({
+  email: 'user@example.com',
+  password: 'password123',
+})
+
+// 邮箱密码登录
+const { data, error } = await supabase.auth.signInWithPassword({
+  email: 'user@example.com',
+  password: 'password123',
+})
+
+// OAuth 登录（如 GitHub）
+const { data, error } = await supabase.auth.signInWithOAuth({
+  provider: 'github',
+})
+```
+
+### 3. Token 获取与请求规范
+
+```javascript
+// 每次请求前获取当前 session 的 token
+const { data: { session } } = await supabase.auth.getSession()
+
+// 所有后端 API 请求必须携带 Authorization header
+const response = await fetch('http://your-server:8005/agents', {
+  headers: {
+    'Authorization': `Bearer ${session.access_token}`,
+    'Content-Type': 'application/json',
+  },
+})
+```
+
+**规则：** 所有 `/health`、`/docs`、`/openapi.json`、`/redoc`、`/info` 以外的接口都必须带 token，否则返回 401。
+
+### 4. 后端返回的错误格式
+
+| 状态码 | 含义 | response body |
+|--------|------|---------------|
+| 401 | 未登录 / token 无效 / token 过期 | `{"detail": "Missing token"}` 或 `{"detail": "Token has expired"}` 或 `{"detail": "Invalid token: ..."}` |
+| 403 | 权限不足（预留，当前不会触发） | `{"detail": "Requires scope: xxx"}` |
+
+**前端处理逻辑：**
+- 收到 401 → 跳转登录页或刷新 token
+- 收到 403 → 提示无权限
+
+### 5. 后端写入 request.state 的用户信息
+
+后端中间件验证 token 后，以下信息可通过依赖注入在路由中使用（前端无需关心，仅供了解）：
+
+```python
+# 后端内部结构（CurrentUser dataclass）
+{
+    "user_id": "uuid-string",     # Supabase user_id
+    "email": "user@example.com",
+    "scopes": []                  # 预留，当前为空
+}
+```
+
+### 6. 前端获取用户信息
+
+前端直接从 Supabase SDK 获取用户资料，不需要调用后端接口：
+
+```javascript
+const { data: { user } } = await supabase.auth.getUser()
+
+// user 对象结构
+{
+  id: "uuid-string",           // 与后端 user_id 对应
+  email: "user@example.com",
+  created_at: "2026-05-07T...",
+  user_metadata: {
+    full_name: "...",
+    avatar_url: "...",
+    // Supabase 标准字段
+  },
+  app_metadata: {
+    provider: "email",          // 或 "github" 等
+    providers: ["email"],
+  }
+}
+```
+
+### 7. Token 生命周期
+
+| 阶段 | 说明 |
+|------|------|
+| 签发 | Supabase 在登录成功后签发 JWT，默认有效期 1 小时 |
+| 刷新 | Supabase JS SDK 自动处理 token 刷新（默认 refresh_token 有效期 7 天） |
+| 过期 | token 过期后后端返回 401，前端 SDK 自动刷新后重试 |
+| 登出 | `await supabase.auth.signOut()` |
+
+**前端不需要手动管理 token 刷新**，Supabase JS SDK 内置了自动刷新机制。只需确保每次 API 调用时从 `getSession()` 获取最新 token。
+
+### 8. 公开路由列表（无需 token）
+
+| 路径 | 说明 |
+|------|------|
+| `GET /` | 首页信息 |
+| `GET /health` | 健康检查 |
+| `GET /docs` | Swagger 文档页面 |
+| `GET /redoc` | ReDoc 文档页面 |
+| `GET /openapi.json` | OpenAPI schema |
+| `GET /info` | OS 元数据 |
+
+其余所有 Agno 路由（agents、teams、workflows、sessions、memory、metrics 等）均需登录。
+
+### 9. 本地用户表字段
+
+后端 `auth.users` 表会在用户首次请求时自动创建记录。字段供后续业务扩展使用：
+
+| 字段 | 类型 | 说明 | 前端是否需要关注 |
+|------|------|------|-----------------|
+| user_id | str (PK) | Supabase user_id | 是（关联业务数据的主键） |
+| email | str | 邮箱 | 否（从 Supabase SDK 直接读取） |
+| nickname | str | 昵称 | 是（如果后端提供编辑接口） |
+| avatar_url | str | 头像 | 是（如果后端提供编辑接口） |
+| created_at | timestamptz | 注册时间 | 可选（展示用） |
+| last_login_at | timestamptz | 最后登录 | 否（后端自动更新） |
+| is_active | bool | 是否启用 | 否（后端管理） |
 
 ## Scope
 
