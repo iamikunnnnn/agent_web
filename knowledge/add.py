@@ -1,5 +1,6 @@
 from config.db_config import create_knowledge
-
+from reader import get_reader
+from chunk import Chunk
 
 def save_to_knowledge_base(agent_id: str,) -> str:
     """
@@ -13,7 +14,10 @@ def save_to_knowledge_base(agent_id: str,) -> str:
                                      name=agent_id,
                                      description=f"Knowledge base for {agent_id}")
         # todo 这个方式极其简陋，尽快更改。
-        knowledge.insert(path="./docs/knowledge.txt")
+        knowledge.insert(path="./docs/knowledge.txt",
+                         reader=get_reader(
+                             chunker=Chunk.get_chunker("document"))
+                         )
         return "成功存储关键信息到知识库"
     except Exception as e:
         return f"存储失败：{str(e)}"
