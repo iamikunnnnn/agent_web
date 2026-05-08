@@ -101,14 +101,18 @@ services:
       - agent_backend
 
   gateway:
-    image: nginx:1.27-alpine
+    image: openresty/openresty:alpine
     depends_on:
       app:
         condition: service_healthy
     ports:
       - "${NGINX_HTTP_PORT:-80}:80"
     volumes:
-      - ./deploy/nginx/default.conf:/etc/nginx/conf.d/default.conf:ro
+      - ./deploy/nginx/nginx.conf:/usr/local/openresty/nginx/conf/nginx.conf:ro
+      - ./deploy/nginx/jwt_verify.lua:/etc/openresty/jwt_verify.lua:ro
+    environment:
+      JWT_SECRET: ${SUPABASE_JWT_SECRET}
+      SUPABASE_URL: ${SUPABASE_URL}
     healthcheck:
       test:
         - CMD-SHELL

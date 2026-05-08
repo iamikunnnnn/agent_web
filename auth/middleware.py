@@ -1,12 +1,13 @@
 from __future__ import annotations
 
+import json
+
 from fastapi import Request
 from fastapi.responses import JSONResponse
 from agno.utils.log import logger
 from starlette.middleware.base import BaseHTTPMiddleware
 
-from auth.model import CurrentUser, TokenPayload
-from auth.verify import InvalidTokenError, verify_token
+from auth.model import CurrentUser
 
 PUBLIC_PATHS: frozenset[str] = frozenset({
     "/",
@@ -26,8 +27,7 @@ def _is_public_path(path: str) -> bool:
     return False
 
 
-def _sync_user_to_db(payload: TokenPayload) -> None:
-    """将登录用户同步到本地用户表。"""
+def _sync_user_to_db(user_id: str, email: str) -> None:
     try:
         import psycopg
         from auth.db import upsert_user
@@ -40,41 +40,46 @@ def _sync_user_to_db(payload: TokenPayload) -> None:
             Config.DB_HOST, Config.DB_PORT, Config.DB_NAME,
         )
         with psycopg.connect(db_url) as conn:
-            user = LocalUser(
-                user_id=payload.sub,
-                email=payload.email,
-            )
+            user = LocalUser(user_id=user_id, email=email)
             upsert_user(conn, user)
     except Exception:
         logger.warning("同步认证用户到本地数据库失败，但不会中断当前请求", exc_info=True)
 
 
-class JWTMiddleware(BaseHTTPMiddleware):
+class GatewayAuthMiddleware(BaseHTTPMiddleware):
+    """从网关注入的 X-User-* 请求头中读取用户信息。
+
+    JWT 验签由 OpenResty 网关层完成，本中间件仅负责：
+    1. 校验内部头是否存在（防御性检查）
+    2. 构建 CurrentUser 并注入 request.state
+    3. 同步用户到本地数据库
+    """
+
     async def dispatch(self, request: Request, call_next):
         if _is_public_path(request.url.path):
             return await call_next(request)
 
-        auth = request.headers.get("Authorization")
-        if not auth or not auth.startswith("Bearer "):
-            return JSONResponse(status_code=401, content={"detail": "缺少 Bearer Token"})
+        user_id = request.headers.get("X-User-Id")
+        if not user_id:
+            return JSONResponse(status_code=401, content={"detail": "未通过网关认证"})
 
-        token = auth.removeprefix("Bearer ").strip()
-
+        email = request.headers.get("X-User-Email", "")
+        scopes_raw = request.headers.get("X-User-Scopes", "[]")
         try:
-            payload = verify_token(token)
-        except InvalidTokenError as e:
-            return JSONResponse(status_code=401, content={"detail": str(e)})
+            scopes = json.loads(scopes_raw)
+        except (json.JSONDecodeError, TypeError):
+            scopes = []
 
         current_user = CurrentUser(
-            user_id=payload.sub,
-            email=payload.email,
-            scopes=payload.scopes,
+            user_id=user_id,
+            email=email,
+            scopes=scopes,
         )
         request.state.user = current_user
         request.state.user_id = current_user.user_id
 
-        _sync_user_to_db(payload)
+        _sync_user_to_db(user_id, email)
 
-        logger.info(f"鉴权通过，已注入 user_id 到请求上下文: user_id={current_user.user_id} path={request.url.path}")
+        logger.info(f"网关鉴权通过: user_id={user_id} path={request.url.path}")
 
         return await call_next(request)

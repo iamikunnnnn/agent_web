@@ -91,10 +91,10 @@ agent_os = AgentOS(
 )
 app = agent_os.get_app()
 
-from auth.middleware import JWTMiddleware
+from auth.middleware import GatewayAuthMiddleware
 
-app.add_middleware(JWTMiddleware)
-log_info("已启用 Supabase JWT 鉴权中间件")
+app.add_middleware(GatewayAuthMiddleware)
+log_info("已启用网关鉴权中间件")
 
 setup_prometheus_monitoring(
     app=app,
