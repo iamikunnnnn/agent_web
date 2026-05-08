@@ -2,13 +2,14 @@ import pytest
 from unittest.mock import patch
 from starlette.testclient import TestClient
 from fastapi import FastAPI, Request
-from auth.middleware import GatewayAuthMiddleware
+from auth.middleware import AuthMiddleware
+from auth.model import TokenPayload
 
 
 @pytest.fixture
 def app():
     _app = FastAPI()
-    _app.add_middleware(GatewayAuthMiddleware)
+    _app.add_middleware(AuthMiddleware)
 
     @_app.get("/health")
     async def health():
@@ -34,18 +35,36 @@ def app():
 
 def test_public_routes_bypass_auth(app):
     client = TestClient(app)
-    resp = client.get("/health")
-    assert resp.status_code == 200
+    assert client.get("/health").status_code == 200
 
 
-def test_protected_route_missing_header(app):
-    client = TestClient(app)
-    resp = client.get("/protected")
-    assert resp.status_code == 401
+def test_local_jwt_auth_missing_token(app):
+    # development 模式（默认），缺少 Bearer token 应返回 401
+    with patch.object(AuthMiddleware, "_use_gateway", False):
+        client = TestClient(app)
+        assert client.get("/protected").status_code == 401
 
 
-def test_protected_route_with_gateway_headers(app):
-    with patch("auth.middleware._sync_user_to_db"):
+def test_local_jwt_auth_valid_token(app):
+    payload = TokenPayload(sub="user-1", email="a@b.com", role="authenticated")
+    with patch.object(AuthMiddleware, "_use_gateway", False), \
+         patch("auth.middleware.verify_token", return_value=payload), \
+         patch("auth.middleware._sync_user_to_db"):
+        client = TestClient(app)
+        resp = client.get("/protected", headers={"Authorization": "Bearer validtoken"})
+        assert resp.status_code == 200
+        assert resp.json()["user_id"] == "user-1"
+
+
+def test_gateway_auth_missing_header(app):
+    with patch.object(AuthMiddleware, "_use_gateway", True):
+        client = TestClient(app)
+        assert client.get("/protected").status_code == 401
+
+
+def test_gateway_auth_valid_headers(app):
+    with patch.object(AuthMiddleware, "_use_gateway", True), \
+         patch("auth.middleware._sync_user_to_db"):
         client = TestClient(app)
         resp = client.get(
             "/protected",
@@ -57,4 +76,3 @@ def test_protected_route_with_gateway_headers(app):
         )
         assert resp.status_code == 200
         assert resp.json()["user_id"] == "user-1"
-        assert resp.json()["email"] == "a@b.com"

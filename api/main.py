@@ -91,10 +91,11 @@ agent_os = AgentOS(
 )
 app = agent_os.get_app()
 
-from auth.middleware import GatewayAuthMiddleware
+from auth.middleware import AuthMiddleware
 
-app.add_middleware(GatewayAuthMiddleware)
-log_info("已启用网关鉴权中间件")
+app.add_middleware(AuthMiddleware)
+_auth_mode = "网关认证 (production)" if AuthMiddleware._use_gateway else "本地 JWT 认证 (development)"
+log_info(f"已启用鉴权中间件: {_auth_mode}")
 
 setup_prometheus_monitoring(
     app=app,
