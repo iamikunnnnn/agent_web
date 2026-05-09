@@ -1,4 +1,5 @@
 import os
+from urllib.parse import parse_qs, urlencode, urlparse, urlunparse
 
 from agno.db.postgres import PostgresDb
 from agno.knowledge import Knowledge
@@ -36,6 +37,49 @@ class Config:
         """验证必要的配置是否存在"""
 
         return True
+
+
+def _build_base_db_url(driver: str) -> str:
+    return "{}://{}{}@{}:{}/{}".format(
+        driver,
+        Config.DB_USER,
+        f":{Config.DB_PASSWORD}" if Config.DB_PASSWORD else "",
+        Config.DB_HOST,
+        Config.DB_PORT,
+        Config.DB_NAME,
+    )
+
+
+def _with_application_name(base_url: str, id: str | None = None) -> str:
+    parsed = urlparse(base_url)
+    query_params = parse_qs(parsed.query)
+
+    app_name = f"{Config.APPLICATION_NAME}-{id or 'unknown'}"
+    query_params["application_name"] = [app_name]
+
+    return urlunparse(
+        (
+            parsed.scheme,
+            parsed.netloc,
+            parsed.path,
+            parsed.params,
+            urlencode(query_params, doseq=True),
+            parsed.fragment,
+        )
+    )
+
+
+def get_psycopg_db_url(id: str | None = None) -> str:
+    """
+    Build a psycopg-compatible PostgreSQL URL.
+
+    psycopg accepts ``postgresql://`` URIs, but not SQLAlchemy dialect aliases
+    such as ``postgresql+psycopg://``.
+    """
+    driver = Config.DB_DRIVER.split("+", 1)[0]
+    if driver == "postgres":
+        driver = "postgresql"
+    return _with_application_name(_build_base_db_url(driver), id=id)
 
 
 def create_knowledge_vector(id: str, **kwargs) -> VectorDb:
@@ -185,38 +229,4 @@ def get_db_url(id: str = None) -> str:
     Returns:
         包含application_name参数的数据库连接URL
     """
-    from urllib.parse import parse_qs, urlencode, urlparse, urlunparse
-
-    # 基础URL
-    base_url = "{}://{}{}@{}:{}/{}".format(
-        Config.DB_DRIVER,
-        Config.DB_USER,
-        f":{Config.DB_PASSWORD}" if Config.DB_PASSWORD else "",
-        Config.DB_HOST,
-        Config.DB_PORT,
-        Config.DB_NAME,
-    )
-
-    # 添加 application_name 参数
-    parsed = urlparse(base_url)
-    query_params = parse_qs(parsed.query)
-
-    # 如果有id，则在application_name中包含id信息
-    if id:
-        app_name = f"{Config.APPLICATION_NAME}-{id}"
-    else:
-        app_name = f"{Config.APPLICATION_NAME}-unknown"
-
-    query_params['application_name'] = [app_name]
-
-    # 重新构建URL
-    new_url = urlunparse((
-        parsed.scheme,
-        parsed.netloc,
-        parsed.path,
-        parsed.params,
-        urlencode(query_params, doseq=True),
-        parsed.fragment
-    ))
-
-    return new_url
+    return _with_application_name(_build_base_db_url(Config.DB_DRIVER), id=id)

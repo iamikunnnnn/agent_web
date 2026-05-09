@@ -1,0 +1,18 @@
+{
+  "permissions": {
+    "allow": [
+      "WebSearch",
+      "Bash(grep -E \"^\\\\\\\\.\\(api|auth|config|server|tools|agent|hook|knowledge|docs|script\\)\")",
+      "Bash(xargs grep -l \"agno\")",
+      "Bash(xargs grep -l \"class Knowledge\")",
+      "Bash(xargs grep -l \"team\")",
+      "Bash(xargs grep -l \"knowledge.*list\\\\|knowledge.*source\\\\|knowledge.*multi\")",
+      "Bash(xargs grep -l \"get_resolved_knowledge\")",
+      "Bash(python -c \"from knowledge.file_detector import FileDetector, detect_file_type, get_reader_for_file, get_chunker_for_file; print\\('FileDetector imports OK'\\)\")",
+      "Bash(python -c \"from knowledge.file_detector import FileDetector, detect_file_type, get_reader_for_file, get_chunker_for_file; print\\('FileDetector imports OK'\\); print\\('PDF type:', detect_file_type\\('test.pdf'\\)\\); print\\('CSV type:', detect_file_type\\('test.csv'\\)\\); chunker = get_chunker_for_file\\('test.pdf'\\); print\\('PDF chunker:', type\\(chunker\\).__name__\\)\")",
+      "Bash(python -c \"from knowledge.file_detector import FileDetector, detect_file_type, get_reader_for_file, get_chunker_for_file; print\\('FileDetector imports OK'\\); print\\('PDF type:', detect_file_type\\('test.pdf'\\)\\); print\\('CSV type:', detect_file_type\\('test.csv'\\)\\); chunker = get_chunker_for_file\\('test.pdf'\\); print\\('PDF chunker:', type\\(chunker\\).__name__\\); chunker2 = get_chunker_for_file\\('test.csv'\\); print\\('CSV chunker:', type\\(chunker2\\).__name__\\)\")",
+      "Bash(python -c \"from knowledge import FileDetector, Chunk, get_reader, get_reader_and_chunker; print\\('knowledge module imports OK'\\)\")",
+      "Bash(python -m pytest tests/test_file_detector.py -v --tb=short)"
+    ]
+  }
+}

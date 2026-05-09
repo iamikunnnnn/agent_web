@@ -15,6 +15,8 @@ PUBLIC_PATHS: frozenset[str] = frozenset({
     "/redoc",
     "/openapi.json",
     "/info",
+    "/config",
+    "/models",
 })
 
 
@@ -32,13 +34,9 @@ def _sync_user_to_db(payload: TokenPayload) -> None:
         import psycopg
         from auth.db import upsert_user
         from auth.model import LocalUser
-        from config.db_config import Config
+        from config.db_config import get_psycopg_db_url
 
-        db_url = "{}://{}{}@{}:{}/{}".format(
-            Config.DB_DRIVER, Config.DB_USER,
-            f":{Config.DB_PASSWORD}" if Config.DB_PASSWORD else "",
-            Config.DB_HOST, Config.DB_PORT, Config.DB_NAME,
-        )
+        db_url = get_psycopg_db_url(id="auth-user-sync")
         with psycopg.connect(db_url) as conn:
             user = LocalUser(
                 user_id=payload.sub,

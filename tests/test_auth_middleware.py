@@ -3,7 +3,7 @@ from unittest.mock import patch
 from starlette.testclient import TestClient
 from fastapi import FastAPI, Request
 from auth.middleware import JWTMiddleware
-from auth.model import TokenPayload, CurrentUser
+from auth.model import TokenPayload
 
 
 @pytest.fixture
@@ -23,6 +23,14 @@ def app():
     async def docs():
         return {}
 
+    @_app.get("/config")
+    async def config():
+        return {"ok": True}
+
+    @_app.get("/models")
+    async def models():
+        return {"ok": True}
+
     @_app.get("/protected")
     async def protected(request: Request):
         return {
@@ -36,6 +44,18 @@ def app():
 def test_public_routes_bypass_auth(app):
     client = TestClient(app)
     resp = client.get("/health")
+    assert resp.status_code == 200
+
+
+def test_config_route_bypasses_auth(app):
+    client = TestClient(app)
+    resp = client.get("/config")
+    assert resp.status_code == 200
+
+
+def test_models_route_bypasses_auth(app):
+    client = TestClient(app)
+    resp = client.get("/models")
     assert resp.status_code == 200
 
 

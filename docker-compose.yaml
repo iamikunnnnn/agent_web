@@ -1,4 +1,26 @@
 services:
+  postgres:
+    image: pgvector/pgvector:pg16
+    environment:
+      POSTGRES_DB: ${DB_NAME:-agent_db}
+      POSTGRES_USER: ${DB_USER:-postgres}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-postgres}
+    expose:
+      - "5432"
+    volumes:
+      - agent_pg_data:/var/lib/postgresql/data
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - pg_isready -U ${DB_USER:-postgres} -d ${DB_NAME:-agent_db}
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 20s
+    restart: unless-stopped
+    networks:
+      - agent_backend
+
   data-mcp:
     build:
       context: .
@@ -7,6 +29,13 @@ services:
     env_file:
       - .env
     environment:
+      DB_DRIVER: postgresql+psycopg
+      DB_HOST: postgres
+      DB_PORT: "5432"
+      DB_USER: ${DB_USER:-postgres}
+      DB_PASSWORD: ${DB_PASSWORD:-postgres}
+      DB_NAME: ${DB_NAME:-agent_db}
+
       DATA_DB_PATH: /app/user_cache/data/data.db
       DATA_UPLOAD_DIR: /app/user_cache/workspace
       ML_MODEL_DIR: /app/user_cache/ml_models
@@ -14,6 +43,9 @@ services:
       - "8085"
     volumes:
       - agent_user_cache:/app/user_cache
+    depends_on:
+      postgres:
+        condition: service_healthy
     healthcheck:
       test:
         - CMD
@@ -36,6 +68,13 @@ services:
     env_file:
       - .env
     environment:
+      DB_DRIVER: postgresql+psycopg
+      DB_HOST: postgres
+      DB_PORT: "5432"
+      DB_USER: ${DB_USER:-postgres}
+      DB_PASSWORD: ${DB_PASSWORD:-postgres}
+      DB_NAME: ${DB_NAME:-agent_db}
+
       MCP_TRANSPORT: streamable-http
       MCP_HOST: 0.0.0.0
       MCP_PORT: "8008"
@@ -44,6 +83,9 @@ services:
       - "8008"
     volumes:
       - agent_user_cache:/app/user_cache
+    depends_on:
+      postgres:
+        condition: service_healthy
     healthcheck:
       test:
         - CMD
@@ -71,6 +113,14 @@ services:
       UVICORN_RELOAD: "false"
       UVICORN_LOG_LEVEL: info
       ENABLE_OTLP_TRACING: "false"
+
+      DB_DRIVER: postgresql+psycopg
+      DB_HOST: postgres
+      DB_PORT: "5432"
+      DB_USER: ${DB_USER:-postgres}
+      DB_PASSWORD: ${DB_PASSWORD:-postgres}
+      DB_NAME: ${DB_NAME:-agent_db}
+
       DATA_DB_PATH: /app/user_cache/data/data.db
       DATA_MCP_URL: http://data-mcp:8085/mcp
       DOCX_USE_MCP_URL: http://docx-use-mcp:8008/mcp
@@ -82,6 +132,8 @@ services:
     expose:
       - "8005"
     depends_on:
+      postgres:
+        condition: service_healthy
       data-mcp:
         condition: service_healthy
       docx-use-mcp:
@@ -127,3 +179,4 @@ networks:
 
 volumes:
   agent_user_cache:
+  agent_pg_data:

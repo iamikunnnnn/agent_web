@@ -1,9 +1,11 @@
 import os
+import re
 from contextlib import asynccontextmanager
 
 from agno.os import AgentOS
 from agno.utils.log import log_info
 from dotenv import load_dotenv
+from fastapi.routing import APIRoute
 
 from api.init_agent import all_agents
 from api.init_team import all_teams
@@ -42,39 +44,84 @@ def _setup_tracing() -> None:
         log_info(f"OTLP tracing 初始化失败，已跳过: {exc}")
 
 
+def _is_app_jwt_auth_enabled() -> bool:
+    return _get_bool_env("ENABLE_APP_JWT_AUTH", True)
+
+
 def _init_auth_db() -> None:
     try:
         import psycopg
-        from auth.db import create_user_table
-        from config.db_config import Config
+        from auth.db import create_user_table, create_knowledge_tables
+        from config.db_config import get_psycopg_db_url
 
-        db_url = "{}://{}{}@{}:{}/{}".format(
-            Config.DB_DRIVER,
-            Config.DB_USER,
-            f":{Config.DB_PASSWORD}" if Config.DB_PASSWORD else "",
-            Config.DB_HOST,
-            Config.DB_PORT,
-            Config.DB_NAME,
-        )
+        db_url = get_psycopg_db_url(id="auth-init")
         with psycopg.connect(db_url) as conn:
             create_user_table(conn)
-        log_info("认证用户表初始化完成")
+            create_knowledge_tables(conn)
+        log_info("认证用户表和知识库表初始化完成")
     except Exception as exc:
         log_info(f"认证用户表初始化已跳过，数据库暂不可用: {exc}")
+
+
+def _dedupe_operation_ids() -> None:
+    duplicate_routes: dict[str, list[APIRoute]] = {}
+    for route in app.routes:
+        if isinstance(route, APIRoute) and route.operation_id:
+            duplicate_routes.setdefault(route.operation_id, []).append(route)
+
+    for operation_id, routes in duplicate_routes.items():
+        if len(routes) <= 1:
+            continue
+
+        for route in routes[1:]:
+            path_suffix = re.sub(r"[^a-zA-Z0-9_]+", "_", route.path).strip("_") or "root"
+            method_suffix = "_".join(sorted(m.lower() for m in (route.methods or {"get"})))
+            route.operation_id = f"{operation_id}_{method_suffix}_{path_suffix}"
+
+        log_info(f"已修正重复 OpenAPI operationId: {operation_id} -> {len(routes)} routes")
 
 
 @asynccontextmanager
 async def lifespan(app):
     from auth.config import AuthConfig
+    from auth.knowledge_processor import start_file_processor, stop_file_processor
+    from auth.official_knowledge import ensure_default_official_kbs
 
     log_info("开始启动 Agent 服务")
-    AuthConfig.validate()
-    log_info("Supabase 鉴权配置校验通过")
-    _init_auth_db()
+    if _is_app_jwt_auth_enabled():
+        AuthConfig.validate()
+        log_info("Supabase 鉴权配置校验通过")
+        _init_auth_db()
+    else:
+        log_info("已关闭应用层 JWT 鉴权，跳过 Supabase 配置校验和本地认证表初始化")
+
+    # Start file processor
+    try:
+        await start_file_processor()
+        log_info("文件处理器已启动")
+    except Exception as exc:
+        log_info(f"文件处理器启动失败: {exc}")
+
+    # Initialize default official knowledge bases
+    try:
+        official_kbs = ensure_default_official_kbs()
+        created_count = sum(1 for kb in official_kbs.values() if kb is not None)
+        log_info(f"官方知识库初始化完成，共 {created_count} 个")
+    except Exception as exc:
+        log_info(f"官方知识库初始化失败: {exc}")
+
     log_info(f"已加载 Agent 数量: {len(all_agents)}")
     log_info(f"已加载 Team 数量: {len(all_teams)}")
     log_info(f"已加载 Workflow 数量: {len(all_workflows)}")
     yield
+
+    # Cleanup
+    try:
+        await stop_file_processor()
+        log_info("文件处理器已停止")
+    except Exception as exc:
+        log_info(f"文件处理器停止失败: {exc}")
+
     log_info("Agent 服务已停止")
 
 
@@ -90,11 +137,21 @@ agent_os = AgentOS(
     tracing=_get_bool_env("ENABLE_OTLP_TRACING", False),
 )
 app = agent_os.get_app()
+_dedupe_operation_ids()
+app.openapi_schema = None
 
-from auth.middleware import JWTMiddleware
+if _is_app_jwt_auth_enabled():
+    from auth.middleware import JWTMiddleware
 
-app.add_middleware(JWTMiddleware)
-log_info("已启用 Supabase JWT 鉴权中间件")
+    app.add_middleware(JWTMiddleware)
+    log_info("已启用 Supabase JWT 鉴权中间件")
+else:
+    log_info("应用层 JWT 鉴权已禁用")
+
+# Register knowledge base router
+from api.knowledge_router import knowledge_router
+app.include_router(knowledge_router)
+log_info("已注册知识库管理路由")
 
 setup_prometheus_monitoring(
     app=app,

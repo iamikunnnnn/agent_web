@@ -1,8 +1,11 @@
 import unittest
 from unittest.mock import MagicMock
+
 import psycopg
+
 from auth.db import upsert_user, create_user_table
 from auth.model import LocalUser
+from config.db_config import get_db_url, get_psycopg_db_url
 
 
 class AuthDBTests(unittest.TestCase):
@@ -29,6 +32,17 @@ class AuthDBTests(unittest.TestCase):
         self.assertTrue(self.cursor.execute.called)
         sql = self.cursor.execute.call_args[0][0]
         self.assertIn("CREATE TABLE", sql)
+
+    def test_psycopg_db_url_uses_plain_postgresql_scheme(self):
+        db_url = get_psycopg_db_url(id="unit-test")
+        self.assertTrue(db_url.startswith("postgresql://"))
+        self.assertNotIn("postgresql+psycopg://", db_url)
+        self.assertIn("application_name=", db_url)
+
+    def test_sqlalchemy_db_url_preserves_configured_driver(self):
+        db_url = get_db_url(id="unit-test")
+        self.assertTrue(db_url.startswith("postgresql+psycopg://"))
+        self.assertIn("application_name=", db_url)
 
 
 if __name__ == "__main__":
