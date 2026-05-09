@@ -1,6 +1,6 @@
 from auth.model import CurrentUser, LocalUser, TokenPayload
 from auth.permissions import get_current_user, require_scope
-from auth.middleware import JWTMiddleware
+from auth.middleware import AuthMiddleware
 
 __all__ = [
     "CurrentUser",
@@ -8,5 +8,5 @@ __all__ = [
     "TokenPayload",
     "get_current_user",
     "require_scope",
-    "JWTMiddleware",
+    "AuthMiddleware",
 ]
