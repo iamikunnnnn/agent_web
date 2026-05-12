@@ -1,5 +1,5 @@
-local jwt = require "resty.jwt"
 local cjson = require "cjson.safe"
+local jwt = require "resty.jwt"
 
 local _M = {}
 
@@ -20,6 +20,39 @@ local function is_public_path(path)
         return true
     end
     return false
+end
+
+local function decode_token_header(token)
+    local encoded = token:match("^([^.]+)")
+    if not encoded then
+        return nil
+    end
+
+    local normalized = encoded:gsub("-", "+"):gsub("_", "/")
+    local remainder = #normalized % 4
+    if remainder > 0 then
+        normalized = normalized .. string.rep("=", 4 - remainder)
+    end
+
+    local decoded = ngx.decode_base64(normalized)
+    if not decoded then
+        return nil
+    end
+
+    return cjson.decode(decoded)
+end
+
+local function verify_with_shared_secret(token, jwt_secret)
+    local jwt_obj = jwt:verify(jwt_secret, token, {
+        require_exp_claim = true,
+        lifetime_grace_period = 0,
+    })
+
+    if not jwt_obj.verified then
+        return nil, jwt_obj.reason or "Token 校验失败"
+    end
+
+    return jwt_obj.payload, nil
 end
 
 function _M.verify()
@@ -51,40 +84,37 @@ function _M.verify()
         ngx.exit(ngx.HTTP_UNAUTHORIZED)
     end
 
-    local jwt_secret = os.getenv("JWT_SECRET")
-    if not jwt_secret or jwt_secret == "" then
-        ngx.log(ngx.ERR, "JWT_SECRET 环境变量未配置")
-        ngx.status = 500
-        ngx.header.content_type = "application/json"
-        ngx.say('{"detail":"网关认证配置错误"}')
-        ngx.exit(ngx.HTTP_INTERNAL_SERVER_ERROR)
-    end
-
     local supabase_url = os.getenv("SUPABASE_URL") or ""
+    local payload = nil
+    local jwt_secret = os.getenv("JWT_SECRET")
+    local header = decode_token_header(token)
+    local algorithm = header and header.alg or nil
 
-    local jwt_obj = jwt:verify(jwt_secret, token, {
-        require_exp_claim = true,
-        lifetime_grace_period = 0,
-    })
-
-    if not jwt_obj.verified then
-        ngx.log(ngx.WARN, "JWT 验证失败: ", jwt_obj.reason or "unknown")
-        ngx.status = 401
-        ngx.header.content_type = "application/json"
-        local reason = jwt_obj.reason or "Token 校验失败"
-        if string.find(reason, "exp") then
-            reason = "Token 已过期"
+    if algorithm == "HS256" or algorithm == "HS384" or algorithm == "HS512" then
+        if not jwt_secret or jwt_secret == "" then
+            ngx.log(ngx.ERR, "JWT_SECRET 环境变量未配置")
+            ngx.status = 500
+            ngx.header.content_type = "application/json"
+            ngx.say('{"detail":"网关认证配置错误"}')
+            ngx.exit(ngx.HTTP_INTERNAL_SERVER_ERROR)
         end
-        ngx.say(string.format('{"detail":"%s"}', reason))
-        ngx.exit(ngx.HTTP_UNAUTHORIZED)
-    end
 
-    local payload = jwt_obj.payload
-    if not payload then
-        ngx.status = 401
-        ngx.header.content_type = "application/json"
-        ngx.say('{"detail":"Token payload 为空"}')
-        ngx.exit(ngx.HTTP_UNAUTHORIZED)
+        local verify_error = nil
+        payload, verify_error = verify_with_shared_secret(token, jwt_secret)
+        if not payload then
+            ngx.log(ngx.WARN, "JWT 验证失败: ", verify_error or "unknown")
+            ngx.status = 401
+            ngx.header.content_type = "application/json"
+            local reason = verify_error or "Token 校验失败"
+            if string.find(reason, "exp") then
+                reason = "Token 已过期"
+            end
+            ngx.say(string.format('{"detail":"%s"}', reason))
+            ngx.exit(ngx.HTTP_UNAUTHORIZED)
+        end
+    else
+        -- ES256/JWKS 等非对称算法交由应用层鉴权处理中间件校验。
+        return
     end
 
     -- 校验 aud

@@ -9,6 +9,7 @@ from agno.vectordb.pgvector import PgVector
 from agno.vectordb.search import SearchType
 from dotenv import load_dotenv
 
+from agno.knowledge.reranker.cohere import CohereReranker
 from config.model_config import get_azure_embedder
 
 # 加载环境变量
@@ -110,6 +111,7 @@ def create_knowledge_vector(id: str, **kwargs) -> VectorDb:
                         # 全文或混合搜索时才有用，而且需要在PostgreSQL中安装`pg_jieba`之类的中文分词扩展
                         # content_language= "chinese",
                         auto_upgrade_schema=True,
+                        reranker=CohereReranker(model="rerank-v3.5"),
                         **kwargs)
 
 
@@ -121,7 +123,7 @@ def create_knowledge(id: str, name: str, description: str, max_results: int = 10
         description=description,
         vector_db=vector_db,
         contents_db=create_knowledge_db(id),
-        max_results=max_results
+        max_results=max_results,
     )
     return knowledge
 

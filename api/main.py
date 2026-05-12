@@ -3,6 +3,7 @@ import re
 from contextlib import asynccontextmanager
 
 from agno.os import AgentOS
+from agno.os.interfaces.agui import AGUI
 from agno.utils.log import log_info
 from dotenv import load_dotenv
 from fastapi.routing import APIRoute
@@ -113,6 +114,7 @@ async def lifespan(app):
     log_info(f"已加载 Agent 数量: {len(all_agents)}")
     log_info(f"已加载 Team 数量: {len(all_teams)}")
     log_info(f"已加载 Workflow 数量: {len(all_workflows)}")
+    log_info(f"已加载 AGUI 接口数量: {len(agui_interfaces)}")
     yield
 
     # Cleanup
@@ -127,14 +129,19 @@ async def lifespan(app):
 
 _setup_tracing()
 tracing_db = db_config.create_tracing_db(id="tracing")
+agui_interfaces = [AGUI(agent=agent, prefix=f"/agents/{agent.id}") for agent in all_agents] + [
+    AGUI(team=team, prefix=f"/teams/{team.id}") for team in all_teams
+]
 agent_os = AgentOS(
     description="AgentOS v2.4",
     agents=all_agents,
     teams=all_teams,
     workflows=all_workflows,
+    interfaces=agui_interfaces,
     lifespan=lifespan,
     db=tracing_db,
     tracing=_get_bool_env("ENABLE_OTLP_TRACING", False),
+    cors_allowed_origins=["https://os.agno.com"],
 )
 app = agent_os.get_app()
 _dedupe_operation_ids()

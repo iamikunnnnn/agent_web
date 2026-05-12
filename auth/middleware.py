@@ -101,3 +101,6 @@ class AuthMiddleware(BaseHTTPMiddleware):
         _inject_user(request, payload.sub, payload.email, payload.scopes)
         logger.info(f"本地 JWT 鉴权通过: user_id={payload.sub} path={request.url.path}")
         return await call_next(request)
+
+
+JWTMiddleware = AuthMiddleware
