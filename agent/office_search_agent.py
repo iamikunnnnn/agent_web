@@ -2,9 +2,10 @@ from __future__ import annotations
 
 from agno.agent import Agent
 
-from config.db_config import create_base_db, create_knowledge
+from config.db_config import create_base_db
 from config.model_config import get_ai_model
 from tools.office_search_toolkit import OfficeSearchToolkit
+from tools.knowledge_query_tool import create_knowledge_query_tool, create_knowledge_list_tool
 
 OFFICE_SEARCH_SYSTEM_MESSAGE = """
 你是搜索专家Agent，是办公团队中的情报收集成员。
@@ -25,19 +26,19 @@ def create_office_search_agent(agent_id: str) -> Agent:
     agent = Agent(
         id=agent_id,
         name="搜索专家Agent",
-        tools=[OfficeSearchToolkit()],
+        tools=[
+            OfficeSearchToolkit(),
+            create_knowledge_query_tool(),
+            create_knowledge_list_tool(),
+        ],
     )
     agent.system_message = OFFICE_SEARCH_SYSTEM_MESSAGE
     agent.description = "办公团队搜索专家，负责收集并整理结构化情报。"
     agent.model = get_ai_model()
     agent.db = create_base_db(agent_id)
-    agent.knowledge = create_knowledge(
-        id=agent_id,
-        name=agent_id,
-        description=f"Knowledge base for {agent_id}",
-    )
-    agent.search_knowledge = True
-    agent.update_knowledge = True
+    # Note: Fixed knowledge binding removed to enable multi-tenant isolation.
+    # agent.search_knowledge = True  # Disabled, using tools instead
+    # agent.update_knowledge = True  # Disabled, no fixed knowledge to update
     agent.add_history_to_context = True
     agent.add_datetime_to_context = True
     agent.markdown = True

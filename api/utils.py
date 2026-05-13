@@ -1,7 +1,7 @@
 from agno.agent import Agent
 from agno.memory import MemoryManager
 
-from config.db_config import create_base_db, create_knowledge
+from config.db_config import create_base_db
 from config.model_config import get_ai_model
 
 def _process_agent_tool_entrypoints(agent: Agent):
@@ -45,11 +45,8 @@ def set_default_config_to_agent(agent: Agent):
             db=agent.db,
             debug_mode=False,
         )
-        agent.knowledge = create_knowledge(
-            id=agent.id,
-            name=agent.id,
-            description=f"Knowledge base for {agent.id}",
-        )
+        # Note: Fixed knowledge binding removed to enable multi-tenant isolation.
+        # Agents should use knowledge query tools instead.
 
         # not default config
         agent.stream_intermediate_steps = True
@@ -60,8 +57,8 @@ def set_default_config_to_agent(agent: Agent):
         agent.store_history_messages=False
         # 每轮对话之后进行记忆
         # agent.enable_user_memories = True
-        agent.search_knowledge = True
-        agent.update_knowledge = True
+        # agent.search_knowledge = True  # Disabled, using tools instead
+        # agent.update_knowledge = True  # Disabled, no fixed knowledge to update
         agent.markdown = True
         agent.add_datetime_to_context = True
         agent.debug_mode = True

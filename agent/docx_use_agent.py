@@ -1,8 +1,9 @@
 from agno.agent import Agent
 
-from config.db_config import create_base_db, create_knowledge
+from config.db_config import create_base_db
 from config.model_config import get_ai_model
 from tools.mcp_tools.docx_use_mcp_tool import create_docx_use_mcp_tool
+from tools.knowledge_query_tool import create_knowledge_query_tool, create_knowledge_list_tool
 
 DOCX_WORD_SYSTEM_MESSAGE = """
 你是一个专业的 Word 文档专家，负责处理办公文档生成、改写、扩写、润色和结构化整理任务。
@@ -30,19 +31,20 @@ def create_docx_use_agent(agent_id: str) -> Agent:
     agent = Agent(
         id=agent_id,
         name="Word文档专家Agent",
-        tools=[create_docx_use_mcp_tool()],
+        tools=[
+            create_docx_use_mcp_tool(),
+            create_knowledge_query_tool(),
+            create_knowledge_list_tool(),
+        ],
     )
     agent.system_message = DOCX_WORD_SYSTEM_MESSAGE
     agent.description = "办公 Word 文档专家，负责生成、改写和整理 .docx 文档。"
     agent.model = get_ai_model()
     agent.db = create_base_db(agent_id)
-    agent.knowledge = create_knowledge(
-        id=agent_id,
-        name=agent_id,
-        description=f"Knowledge base for {agent_id}",
-    )
-    agent.search_knowledge = True
-    agent.update_knowledge = True
+    # Note: Fixed knowledge binding removed to enable multi-tenant isolation.
+    # Agents now query user knowledge bases through tools.
+    # agent.search_knowledge = True  # Disabled, using tools instead
+    agent.update_knowledge = False  # Disabled, no fixed knowledge to update
     agent.add_history_to_context = True
     agent.add_datetime_to_context = True
     agent.markdown = True

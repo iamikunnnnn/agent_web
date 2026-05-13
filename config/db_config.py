@@ -9,7 +9,6 @@ from agno.vectordb.pgvector import PgVector
 from agno.vectordb.search import SearchType
 from dotenv import load_dotenv
 
-from agno.knowledge.reranker.cohere import CohereReranker
 from config.model_config import get_siliconflow_embedder
 
 # 加载环境变量
@@ -103,6 +102,7 @@ def create_knowledge_vector(id: str, **kwargs) -> VectorDb:
         return LightRag(server_url=os.getenv("LIGHTRAG_SERVER_URL"), **kwargs)
     else:
         # 默认使用PgVector
+        from agno.knowledge.reranker.cohere import CohereReranker
         return PgVector(table_name=table_name,
                         schema=Config.DB_NAME,
                         db_url=get_db_url(id=id),

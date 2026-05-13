@@ -2,10 +2,11 @@ from __future__ import annotations
 
 from agno.agent import Agent
 
-from config.db_config import create_base_db, create_knowledge
+from config.db_config import create_base_db
 from config.model_config import get_ai_model
-from tools.mcp_tools.docx_use_mcp_tool import create_docx_use_mcp_tool
 from tools.office_file_toolkit import OfficeFileToolkit
+from tools.mcp_tools.docx_use_mcp_tool import create_docx_use_mcp_tool
+from tools.knowledge_query_tool import create_knowledge_query_tool, create_knowledge_list_tool
 
 OFFICE_WORD_SYSTEM_MESSAGE = """
 你是 Word文档专家Agent，负责生成和修改 `.docx` 办公文档。
@@ -28,19 +29,20 @@ def create_office_word_agent(agent_id: str) -> Agent:
     agent = Agent(
         id=agent_id,
         name="Word文档专家Agent",
-        tools=[OfficeFileToolkit(), create_docx_use_mcp_tool()],
+        tools=[
+            OfficeFileToolkit(),
+            create_docx_use_mcp_tool(),
+            create_knowledge_query_tool(),
+            create_knowledge_list_tool(),
+        ],
     )
     agent.system_message = OFFICE_WORD_SYSTEM_MESSAGE
     agent.description = "办公 Word 文档专家，负责读取、修改并交付 .docx 文件。"
     agent.model = get_ai_model()
     agent.db = create_base_db(agent_id)
-    agent.knowledge = create_knowledge(
-        id=agent_id,
-        name=agent_id,
-        description=f"Knowledge base for {agent_id}",
-    )
-    agent.search_knowledge = True
-    agent.update_knowledge = True
+    # Note: Fixed knowledge binding removed to enable multi-tenant isolation.
+    # agent.search_knowledge = True  # Disabled, using tools instead
+    # agent.update_knowledge = True  # Disabled, no fixed knowledge to update
     agent.add_history_to_context = True
     agent.add_datetime_to_context = True
     agent.markdown = True
