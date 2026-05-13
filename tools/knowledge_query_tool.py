@@ -9,7 +9,7 @@ from typing import List, Optional
 from agno.tools.function import Function
 from agno.utils.log import logger
 
-from auth.knowledge_db import list_accessible_knowledge_bases
+from auth.kb_metadata import list_accessible_knowledge_bases
 from auth.model import CurrentUser
 from config.db_config import create_knowledge
 

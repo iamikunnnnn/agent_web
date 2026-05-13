@@ -16,7 +16,7 @@ import psycopg
 
 logger = logging.getLogger(__name__)
 
-from auth.knowledge_db import (
+from auth.kb_metadata import (
     create_knowledge_base,
     get_knowledge_base,
     KnowledgeBaseRecord,
@@ -108,7 +108,7 @@ def create_official_knowledge_base(
     except Exception as e:
         logger.error(f"Failed to create vector DB for official KB '{name}': {e}")
         # Rollback DB record
-        from auth.knowledge_db import delete_knowledge_base, drop_knowledge_tables
+        from auth.kb_metadata import delete_knowledge_base, drop_knowledge_tables
         delete_knowledge_base(kb_id)
         return None
 
@@ -170,7 +170,7 @@ def populate_official_kb(
     if processed_count > 0:
         try:
             chunk_count = _count_chunks(kb_id)
-            from auth.knowledge_db import update_kb_chunk_count
+            from auth.kb_metadata import update_kb_chunk_count
             update_kb_chunk_count(kb_id, increment=chunk_count)
         except Exception as e:
             logger.error(f"Failed to update chunk count for official KB {kb_id}: {e}")

@@ -15,7 +15,7 @@ from fastapi.responses import FileResponse as FastAPIFileResponse
 
 from auth.permissions import get_current_user
 from auth.model import CurrentUser
-from auth.knowledge_db import (
+from auth.kb_metadata import (
     create_knowledge_base,
     get_knowledge_base,
     list_knowledge_bases,
@@ -372,7 +372,7 @@ async def upload_file_to_knowledge_base(
     update_kb_file_count(kb_id, increment=1)
 
     # Queue file for processing
-    from auth.knowledge_processor import queue_file_for_processing
+    from knowledge.processor import queue_file_for_processing
     await queue_file_for_processing(file_id, kb_id)
 
     return FileUploadResponse(
@@ -593,7 +593,7 @@ async def copy_to_knowledge_base(
     copy_record = record_knowledge_copy(source_kb.kb_id, target_kb.kb_id)
 
     # Perform actual vector data copying
-    from auth.official_knowledge import copy_official_kb_to_personal
+    from auth.official_kb import copy_official_kb_to_personal
     try:
         copy_result = copy_official_kb_to_personal(source_kb.kb_id, target_kb.kb_id)
         chunks_copied = copy_result.get("chunks_copied", 0)

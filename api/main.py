@@ -52,7 +52,8 @@ def _is_app_jwt_auth_enabled() -> bool:
 def _init_auth_db() -> None:
     try:
         import psycopg
-        from auth.db import create_user_table, create_knowledge_tables
+        from auth.user_db import create_user_table
+        from auth.kb_metadata import create_knowledge_tables
         from config.db_config import get_psycopg_db_url
 
         db_url = get_psycopg_db_url(id="auth-init")
@@ -84,9 +85,9 @@ def _dedupe_operation_ids() -> None:
 
 @asynccontextmanager
 async def lifespan(app):
-    from auth.config import AuthConfig
-    from auth.knowledge_processor import start_file_processor, stop_file_processor
-    from auth.official_knowledge import ensure_default_official_kbs
+    from auth.auth_config import AuthConfig
+    from knowledge.processor import start_file_processor, stop_file_processor
+    from auth.official_kb import ensure_default_official_kbs
 
     log_info("开始启动 Agent 服务")
     if _is_app_jwt_auth_enabled():

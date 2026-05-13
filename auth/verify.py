@@ -6,7 +6,7 @@ import httpx
 import jwt
 from jwt import PyJWKClient
 
-from auth.config import AuthConfig
+from auth.auth_config import AuthConfig
 from auth.model import TokenPayload
 
 

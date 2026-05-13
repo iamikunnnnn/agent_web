@@ -14,7 +14,7 @@ from urllib.parse import urlparse
 import aiohttp
 import aiofiles
 
-from auth.knowledge_db import (
+from auth.kb_metadata import (
     get_file_record,
     update_file_status,
     update_kb_chunk_count,
@@ -39,7 +39,7 @@ async def _download_file_to_temp(url: str, file_id: str) -> Path:
 
     Args:
         url: File URL (Qiniu or local path)
-        file_id: File ID for naming the temp file
+        file_id: File ID for naming temp file
 
     Returns:
         Path to downloaded file
@@ -92,7 +92,7 @@ class FileProcessor:
         self.processing: Set[str] = set()  # Track currently processing file IDs
 
     async def start(self):
-        """Start the background workers."""
+        """Start background workers."""
         if self.running:
             return
 
@@ -105,7 +105,7 @@ class FileProcessor:
         logger.info(f"Started {self.max_workers} file processing workers")
 
     async def stop(self):
-        """Stop the background workers."""
+        """Stop background workers."""
         self.running = False
         for _ in range(self.max_workers):
             await self.queue.put(None)  # Send stop signal
@@ -245,7 +245,7 @@ _file_processor: FileProcessor = None
 
 
 def get_file_processor() -> FileProcessor:
-    """Get the global file processor instance."""
+    """Get global file processor instance."""
     global _file_processor
     if _file_processor is None:
         _file_processor = FileProcessor(max_workers=3)
@@ -253,13 +253,13 @@ def get_file_processor() -> FileProcessor:
 
 
 async def start_file_processor():
-    """Start the global file processor."""
+    """Start global file processor."""
     processor = get_file_processor()
     await processor.start()
 
 
 async def stop_file_processor():
-    """Stop the global file processor."""
+    """Stop global file processor."""
     processor = get_file_processor()
     await processor.stop()
 
@@ -268,7 +268,6 @@ async def queue_file_for_processing(file_id: str, kb_id: str):
     """Queue a file for processing."""
     processor = get_file_processor()
     await processor.enqueue(file_id, kb_id)
-
 
 # Utility functions for manual processing
 
@@ -293,7 +292,7 @@ def sync_process_file(file_id: str, kb_id: str) -> str:
     """
     Synchronous wrapper for file processing (for use in non-async contexts).
 
-    Returns the final processing status.
+    Returns final processing status.
     """
     try:
         loop = asyncio.get_event_loop()
