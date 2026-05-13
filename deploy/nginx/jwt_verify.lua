@@ -86,13 +86,13 @@ function _M.verify()
 
     local supabase_url = os.getenv("SUPABASE_URL") or ""
     local payload = nil
-    local jwt_secret = os.getenv("JWT_SECRET")
+    local jwt_secret = os.getenv("SUPABASE_JWT_SECRET")
     local header = decode_token_header(token)
     local algorithm = header and header.alg or nil
 
     if algorithm == "HS256" or algorithm == "HS384" or algorithm == "HS512" then
         if not jwt_secret or jwt_secret == "" then
-            ngx.log(ngx.ERR, "JWT_SECRET 环境变量未配置")
+            ngx.log(ngx.ERR, "SUPABASE_JWT_SECRET 环境变量未配置")
             ngx.status = 500
             ngx.header.content_type = "application/json"
             ngx.say('{"detail":"网关认证配置错误"}')

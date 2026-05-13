@@ -1,188 +1,189 @@
-services:
-  postgres:
-    image: pgvector/pgvector:pg16
-    environment:
-      POSTGRES_DB: ${DB_NAME:-agent_db}
-      POSTGRES_USER: ${DB_USER:-postgres}
-      POSTGRES_PASSWORD: ${DB_PASSWORD:-postgres}
-    expose:
-      - "5432"
-    volumes:
-      - agent_pg_data:/var/lib/postgresql/data
-    healthcheck:
-      test:
-        - CMD-SHELL
-        - pg_isready -U ${DB_USER:-postgres} -d ${DB_NAME:-agent_db}
-      interval: 10s
-      timeout: 5s
-      retries: 12
-      start_period: 20s
-    restart: unless-stopped
-    networks:
-      - agent_backend
+services:  # 定义所有要启动的服务/容器
 
-  data-mcp:
-    build:
-      context: .
-      dockerfile: Dockerfile
-    command: python data_mcp_main.py
-    env_file:
-      - .env
-    environment:
-      DB_DRIVER: postgresql+psycopg
-      DB_HOST: postgres
-      DB_PORT: "5432"
-      DB_USER: ${DB_USER:-postgres}
-      DB_PASSWORD: ${DB_PASSWORD:-postgres}
-      DB_NAME: ${DB_NAME:-agent_db}
+  postgres:  # 服务名；同一个 Docker 网络里的其他服务可以用 postgres 作为主机名访问它
+    image: pgvector/pgvector:pg16  # 使用带 pgvector 扩展的 PostgreSQL 16 镜像
+    environment:  # 给 postgres 容器注入环境变量
+      POSTGRES_DB: ${DB_NAME:-agent_db}  # 初始化数据库名；优先用 .env 里的 DB_NAME，没有就默认 agent_db
+      POSTGRES_USER: ${DB_USER:-postgres}  # 初始化数据库用户名；优先用 DB_USER，没有就默认 postgres
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-postgres}  # 初始化数据库密码；优先用 DB_PASSWORD，没有就默认 postgres
+    expose:  # 只把端口暴露给同一个 Docker 网络内的其他容器，不暴露到宿主机公网
+      - "5432"  # PostgreSQL 默认端口；app/data-mcp/docx-use-mcp 可以通过 postgres:5432 访问
+    volumes:  # 配置数据持久化挂载
+      - agent_pg_data:/var/lib/postgresql/data  # 把数据库真实数据目录挂到 Docker 命名卷，容器删了数据也还在
+    healthcheck:  # 容器健康检查，用来判断 postgres 是否真的可用
+      test:  # 健康检查命令
+        - CMD-SHELL  # 使用 shell 执行后面的命令
+        - pg_isready -U ${DB_USER:-postgres} -d ${DB_NAME:-agent_db}  # 检查 PostgreSQL 是否能接受连接
+      interval: 10s  # 每 10 秒检查一次
+      timeout: 5s  # 每次检查最多等 5 秒
+      retries: 12  # 连续失败 12 次后认为不健康
+      start_period: 20s  # 容器启动后先宽限 20 秒，避免数据库初始化期间误判失败
+    restart: unless-stopped  # 容器异常退出自动重启，除非你手动 stop
+    networks:  # 加入指定 Docker 网络
+      - agent_backend  # 加入 agent_backend 网络，方便其他服务通过服务名访问它
 
-      DATA_DB_PATH: /app/user_cache/data/data.db
-      DATA_UPLOAD_DIR: /app/user_cache/workspace
-      ML_MODEL_DIR: /app/user_cache/ml_models
-    expose:
-      - "8085"
-    volumes:
-      - agent_user_cache:/app/user_cache
-    depends_on:
-      postgres:
-        condition: service_healthy
-    healthcheck:
-      test:
-        - CMD
-        - python
-        - -c
-        - import socket,sys; s=socket.socket(); s.settimeout(2); s.connect(("127.0.0.1", 8085)); s.close()
-      interval: 10s
-      timeout: 5s
-      retries: 12
-      start_period: 20s
-    restart: unless-stopped
-    networks:
-      - agent_backend
+  data-mcp:  # 数据处理 MCP 服务
+    build:  # 从源码构建镜像
+      context: .  # 构建上下文是当前目录
+      dockerfile: Dockerfile  # 使用当前目录下的 Dockerfile 构建
+    command: python data_mcp_main.py  # 容器启动后执行这个命令，启动 data-mcp 服务
+    env_file:  # 读取环境变量文件
+      - .env  # 把 .env 文件里的变量注入容器
+    environment:  # 额外定义或覆盖容器环境变量
+      DB_DRIVER: postgresql+psycopg  # 数据库驱动，表示用 SQLAlchemy/psycopg 连接 PostgreSQL
+      DB_HOST: postgres  # 数据库主机名；这里指向 postgres 服务，而不是 localhost
+      DB_PORT: "5432"  # 数据库端口
+      DB_USER: ${DB_USER:-postgres}  # 数据库用户名；优先读 .env，没有就默认 postgres
+      DB_PASSWORD: ${DB_PASSWORD:-postgres}  # 数据库密码；优先读 .env，没有就默认 postgres
+      DB_NAME: ${DB_NAME:-agent_db}  # 数据库名；优先读 .env，没有就默认 agent_db
 
-  docx-use-mcp:
-    build:
-      context: .
-      dockerfile: Dockerfile
-    command: python docx_use_mcp_main.py
-    env_file:
-      - .env
-    environment:
-      DB_DRIVER: postgresql+psycopg
-      DB_HOST: postgres
-      DB_PORT: "5432"
-      DB_USER: ${DB_USER:-postgres}
-      DB_PASSWORD: ${DB_PASSWORD:-postgres}
-      DB_NAME: ${DB_NAME:-agent_db}
+      DATA_DB_PATH: /app/user_cache/data/data.db  # data-mcp 自己使用的本地 SQLite/数据文件路径
+      DATA_UPLOAD_DIR: /app/user_cache/workspace  # 用户上传文件或工作区文件存放目录
+      ML_MODEL_DIR: /app/user_cache/ml_models  # 机器学习模型文件存放目录
+    expose:  # 只暴露给 Docker 内部网络
+      - "8085"  # data-mcp 服务监听端口；app 可以通过 http://data-mcp:8085 访问
+    volumes:  # 配置持久化目录
+      - agent_user_cache:/app/user_cache  # 把用户缓存、上传文件、模型文件挂到命名卷
+    depends_on:  # 定义启动依赖
+      postgres:  # 依赖 postgres 服务
+        condition: service_healthy  # 等 postgres 健康检查通过后，再启动 data-mcp
+    healthcheck:  # data-mcp 的健康检查
+      test:  # 健康检查命令
+        - CMD  # 直接执行命令，不通过 shell
+        - python  # 使用 python 执行检查脚本
+        - -c  # Python 的命令行参数，表示执行后面的字符串代码
+        - import socket,sys; s=socket.socket(); s.settimeout(2); s.connect(("127.0.0.1", 8085)); s.close()  # 尝试连接本容器 8085 端口，能连上就认为服务活着
+      interval: 10s  # 每 10 秒检查一次
+      timeout: 5s  # 每次检查最多等 5 秒
+      retries: 12  # 连续失败 12 次后认为不健康
+      start_period: 20s  # 启动后宽限 20 秒
+    restart: unless-stopped  # 异常退出自动重启，手动停止后不再自动启动
+    networks:  # 加入 Docker 网络
+      - agent_backend  # 加入后，app 可以通过 data-mcp 这个服务名访问它
 
-      MCP_TRANSPORT: streamable-http
-      MCP_HOST: 0.0.0.0
-      MCP_PORT: "8008"
-      OFFICE_BASE_DIR: /app/user_cache/office
-    expose:
-      - "8008"
-    volumes:
-      - agent_user_cache:/app/user_cache
-    depends_on:
-      postgres:
-        condition: service_healthy
-    healthcheck:
-      test:
-        - CMD
-        - python
-        - -c
-        - import socket,sys; s=socket.socket(); s.settimeout(2); s.connect(("127.0.0.1", 8008)); s.close()
-      interval: 10s
-      timeout: 5s
-      retries: 12
-      start_period: 20s
-    restart: unless-stopped
-    networks:
-      - agent_backend
+  docx-use-mcp:  # 文档/Office/docx 处理 MCP 服务
+    build:  # 从源码构建镜像
+      context: .  # 构建上下文是当前项目目录
+      dockerfile: Dockerfile  # 使用当前目录下的 Dockerfile
+    command: python docx_use_mcp_main.py  # 容器启动后运行 docx_use_mcp_main.py
+    env_file:  # 加载环境变量文件
+      - .env  # 读取 .env
+    environment:  # 给容器设置环境变量
+      DB_DRIVER: postgresql+psycopg  # 数据库驱动
+      DB_HOST: postgres  # 数据库主机名，指向 postgres 容器
+      DB_PORT: "5432"  # PostgreSQL 端口
+      DB_USER: ${DB_USER:-postgres}  # 数据库用户名
+      DB_PASSWORD: ${DB_PASSWORD:-postgres}  # 数据库密码
+      DB_NAME: ${DB_NAME:-agent_db}  # 数据库名
 
-  app:
-    build:
-      context: .
-      dockerfile: Dockerfile
-    command: python main.py
-    env_file:
-      - .env
-    environment:
-      APP_HOST: 0.0.0.0
-      APP_PORT: "8005"
-      UVICORN_RELOAD: "false"
-      UVICORN_LOG_LEVEL: info
-      ENABLE_OTLP_TRACING: "false"
+      MCP_TRANSPORT: streamable-http  # MCP 服务使用 streamable-http 传输协议
+      MCP_HOST: 0.0.0.0  # 服务监听所有网卡；容器内必须这样，其他容器才能访问
+      MCP_PORT: "8008"  # MCP 服务监听端口
+      OFFICE_BASE_DIR: /app/user_cache/office  # Office/docx 相关文件的工作目录
+    expose:  # 只暴露给 Docker 内部网络
+      - "8008"  # docx-use-mcp 服务端口；app 通过 http://docx-use-mcp:8008/mcp 访问
+    volumes:  # 挂载持久化目录
+      - agent_user_cache:/app/user_cache  # 和其他服务共享 user_cache，方便读写同一批文件
+    depends_on:  # 启动依赖
+      postgres:  # 依赖 postgres
+        condition: service_healthy  # 等数据库健康后再启动
+    healthcheck:  # 健康检查
+      test:  # 健康检查命令
+        - CMD  # 直接执行命令
+        - python  # 使用 python
+        - -c  # 执行后面的 Python 字符串
+        - import socket,sys; s=socket.socket(); s.settimeout(2); s.connect(("127.0.0.1", 8008)); s.close()  # 尝试连接本容器 8008 端口
+      interval: 10s  # 每 10 秒检查一次
+      timeout: 5s  # 每次最多 5 秒
+      retries: 12  # 连续失败 12 次后判定不健康
+      start_period: 20s  # 启动宽限时间 20 秒
+    restart: unless-stopped  # 异常退出自动重启
+    networks:  # 网络配置
+      - agent_backend  # 加入 agent_backend 网络
 
-      DB_DRIVER: postgresql+psycopg
-      DB_HOST: postgres
-      DB_PORT: "5432"
-      DB_USER: ${DB_USER:-postgres}
-      DB_PASSWORD: ${DB_PASSWORD:-postgres}
-      DB_NAME: ${DB_NAME:-agent_db}
+  app:  # 主应用服务，一般是你的 FastAPI/Agno 后端
+    build:  # 从源码构建镜像
+      context: .  # 构建上下文是当前目录
+      dockerfile: Dockerfile  # 使用当前目录的 Dockerfile
+    command: python main.py  # 容器启动后运行主程序 main.py
+    env_file:  # 加载 .env 文件
+      - .env  # 把 .env 中的变量注入容器
+    environment:  # 设置主应用环境变量
+      APP_HOST: 0.0.0.0  # 应用监听所有网卡；容器内服务要被其他容器访问，通常用 0.0.0.0
+      APP_PORT: "8005"  # 主应用监听端口
+      UVICORN_RELOAD: "false"  # 关闭 reload；生产环境不能开热重载
+      UVICORN_LOG_LEVEL: info  # Uvicorn 日志级别
+      ENABLE_OTLP_TRACING: "false"  # 关闭 OTLP 链路追踪
 
-      DATA_DB_PATH: /app/user_cache/data/data.db
-      DATA_MCP_URL: http://data-mcp:8085/mcp
-      DOCX_USE_MCP_URL: http://docx-use-mcp:8008/mcp
-      DATA_UPLOAD_DIR: /app/user_cache/workspace
-      ML_MODEL_DIR: /app/user_cache/ml_models
-      OFFICE_BASE_DIR: /app/user_cache/office
-    volumes:
-      - agent_user_cache:/app/user_cache
-    expose:
-      - "8005"
-    depends_on:
-      postgres:
-        condition: service_healthy
-      data-mcp:
-        condition: service_healthy
-      docx-use-mcp:
-        condition: service_healthy
-    healthcheck:
-      test:
-        - CMD
-        - python
-        - -c
-        - from urllib.request import urlopen; import sys; sys.exit(0 if urlopen("http://127.0.0.1:8005/openapi.json").status == 200 else 1)
-      interval: 15s
-      timeout: 5s
-      retries: 12
-      start_period: 25s
-    restart: unless-stopped
-    networks:
-      - agent_backend
+      DB_DRIVER: postgresql+psycopg  # 数据库驱动
+      DB_HOST: postgres  # 数据库服务名，指向 postgres 容器
+      DB_PORT: "5432"  # 数据库端口
+      DB_USER: ${DB_USER:-postgres}  # 数据库用户名
+      DB_PASSWORD: ${DB_PASSWORD:-postgres}  # 数据库密码
+      DB_NAME: ${DB_NAME:-agent_db}  # 数据库名称
 
-  gateway:
-    build:
-      context: .
-      dockerfile: deploy/nginx/Dockerfile
-    depends_on:
-      app:
-        condition: service_healthy
-    ports:
-      - "${NGINX_HTTP_PORT:-80}:80"
-    volumes:
-      - ./deploy/nginx/nginx.conf:/usr/local/openresty/nginx/conf/nginx.conf:ro
-      - ./deploy/nginx/jwt_verify.lua:/etc/openresty/jwt_verify.lua:ro
-    environment:
-      JWT_SECRET: ${SUPABASE_JWT_SECRET}
-      SUPABASE_URL: ${SUPABASE_URL}
-    healthcheck:
-      test:
-        - CMD-SHELL
-        - wget -q -O /dev/null http://127.0.0.1/health || exit 1
-      interval: 15s
-      timeout: 5s
-      retries: 12
-      start_period: 10s
-    restart: unless-stopped
-    networks:
-      - agent_backend
+      DATA_DB_PATH: /app/user_cache/data/data.db  # 数据服务使用的数据文件路径
+      DATA_MCP_URL: http://data-mcp:8085/mcp  # data-mcp 的内部访问地址；这里用服务名 data-mcp
+      DOCX_USE_MCP_URL: http://docx-use-mcp:8008/mcp  # docx-use-mcp 的内部访问地址
+      DATA_UPLOAD_DIR: /app/user_cache/workspace  # 上传文件目录
+      ML_MODEL_DIR: /app/user_cache/ml_models  # 机器学习模型目录
+      OFFICE_BASE_DIR: /app/user_cache/office  # Office 文件处理目录
+    volumes:  # 挂载持久化目录
+      - agent_user_cache:/app/user_cache  # 主应用和 MCP 服务共享用户缓存目录
+    expose:  # 只暴露给 Docker 内部网络
+      - "8005"  # app 服务端口；gateway 通过 app:8005 访问
+    depends_on:  # 启动依赖
+      postgres:  # 依赖数据库
+        condition: service_healthy  # 数据库健康后再启动
+      data-mcp:  # 依赖 data-mcp
+        condition: service_healthy  # data-mcp 健康后再启动
+      docx-use-mcp:  # 依赖 docx-use-mcp
+        condition: service_healthy  # docx-use-mcp 健康后再启动
+    healthcheck:  # 主应用健康检查
+      test:  # 健康检查命令
+        - CMD  # 直接执行命令
+        - python  # 使用 python
+        - -c  # 执行后面的 Python 代码
+        - from urllib.request import urlopen; import sys; sys.exit(0 if urlopen("http://127.0.0.1:8005/openapi.json").status == 200 else 1)  # 请求本容器 openapi.json，返回 200 就健康
+      interval: 15s  # 每 15 秒检查一次
+      timeout: 5s  # 每次最多等待 5 秒
+      retries: 12  # 连续失败 12 次后认为不健康
+      start_period: 25s  # 启动后宽限 25 秒
+    restart: unless-stopped  # 异常退出自动重启
+    networks:  # 网络配置
+      - agent_backend  # 加入 agent_backend 网络
 
-networks:
-  agent_backend:
-    driver: bridge
+  gateway:  # 网关服务，一般是 Nginx/OpenResty，对外暴露 HTTP 入口
+    build:  # 从源码构建 gateway 镜像
+      context: .  # 构建上下文是当前目录
+      dockerfile: deploy/nginx/Dockerfile  # 使用 deploy/nginx/Dockerfile 构建 Nginx/OpenResty 镜像
+    depends_on:  # 启动依赖
+      app:  # 依赖主应用
+        condition: service_healthy  # 等 app 健康后再启动 gateway
+    ports:  # 把容器端口映射到宿主机端口；这是对外暴露入口
+      - "${NGINX_HTTP_PORT:-80}:80"  # 宿主机端口优先用 NGINX_HTTP_PORT，没有就用 80；映射到容器内 80
+    volumes:  # 挂载配置文件
+      - ./deploy/nginx/nginx.conf:/usr/local/openresty/nginx/conf/nginx.conf:ro  # 把本地 nginx.conf 挂进容器；ro 表示只读
+      - ./deploy/nginx/jwt_verify.lua:/etc/openresty/jwt_verify.lua:ro  # 把 JWT 校验 Lua 脚本挂进容器；只读
+    environment:  # 给 gateway 容器注入环境变量
+      JWT_SECRET: ${SUPABASE_JWT_SECRET}  # JWT 校验密钥；来自 .env 里的 SUPABASE_JWT_SECRET
+      SUPABASE_URL: ${SUPABASE_URL}  # Supabase 地址；可供 Lua/Nginx 鉴权逻辑使用
+    healthcheck:  # gateway 健康检查
+      test:  # 健康检查命令
+        - CMD-SHELL  # 通过 shell 执行
+        - wget -q -O /dev/null http://127.0.0.1/health || exit 1  # 请求 gateway 自己的 /health，失败就退出 1
+      interval: 15s  # 每 15 秒检查一次
+      timeout: 5s  # 每次最多 5 秒
+      retries: 12  # 连续失败 12 次判定不健康
+      start_period: 10s  # 启动后宽限 10 秒
+    restart: unless-stopped  # 异常退出自动重启
+    networks:  # 网络配置
+      - agent_backend  # 加入 agent_backend 网络，这样 gateway 可以访问 app:8005
 
-volumes:
-  agent_user_cache:
-  agent_pg_data:
+networks:  # 定义 Docker 网络
+  agent_backend:  # 网络名
+    driver: bridge  # 使用 bridge 网络；同网络容器可以通过服务名互相访问
+
+volumes:  # 定义 Docker 命名卷
+  agent_user_cache:  # 用户缓存卷；保存上传文件、模型文件、Office 文件等
+  agent_pg_data:  # PostgreSQL 数据卷；保存数据库真实数据

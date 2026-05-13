@@ -24,7 +24,7 @@ CREATE TABLE IF NOT EXISTS auth.users (
 _CREATE_KNOWLEDGE_TABLES_SQL = """
 -- Knowledge Base Metadata Table
 CREATE TABLE IF NOT EXISTS auth.knowledge_bases (
-    kb_id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    kb_id              TEXT PRIMARY KEY,
     kb_name            TEXT NOT NULL,
     kb_description     TEXT NOT NULL DEFAULT '',
 

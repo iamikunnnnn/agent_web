@@ -3,7 +3,7 @@
 import os
 from typing import Optional
 
-from agno.knowledge.embedder.azure_openai import AzureOpenAIEmbedder
+from agno.knowledge.embedder.openai_like import OpenAILikeEmbedder
 from agno.models.base import Model
 from agno.models.openai import OpenAILike
 from agno.models.deepseek import DeepSeek
@@ -26,11 +26,10 @@ class Config:
     DEEPSEEK_MODEL_ID: Optional[str] = os.getenv("DEEPSEEK_MODEL_ID", "deepseek-chat")
     DEEPSEEK_BASE_URL: Optional[str] = os.getenv("DEEPSEEK_BASE_URL", "https://api.deepseek.com")
 
-    # Azure Embedder 配置
-    AZURE_EMBEDDER_OPENAI_API_KEY: Optional[str] = os.getenv("AZURE_EMBEDDER_OPENAI_API_KEY")
-    AZURE_EMBEDDER_OPENAI_ENDPOINT: Optional[str] = os.getenv("AZURE_EMBEDDER_OPENAI_ENDPOINT")
-    AZURE_EMBEDDER_OPENAI_API_VERSION: Optional[str] = os.getenv("AZURE_EMBEDDER_OPENAI_API_VERSION")
-    AZURE_EMBEDDER_DEPLOYMENT: Optional[str] = os.getenv("AZURE_EMBEDDER_DEPLOYMENT")
+    # siliconflow Embedder 配置
+    SILICONFLOW_EMBEDDER_OPENAI_API_KEY: Optional[str] = os.getenv("SILICONFLOW_EMBEDDER_OPENAI_API_KEY")
+    SILICONFLOW_EMBEDDER_OPENAI_ENDPOINT: Optional[str] = os.getenv("SILICONFLOW_EMBEDDER_OPENAI_ENDPOINT")
+    SILICONFLOW_EMBEDDER_MODEL_ID: Optional[str] = os.getenv("SILICONFLOW_EMBEDDER_MODEL_ID")
 
     @classmethod
     def validate_config(cls) -> bool:
@@ -73,14 +72,13 @@ class Config:
 
     # todo 添加硅基流动的embedder model
     @classmethod
-    def get_azure_embedder_config(cls, id=None) -> dict:
-        """获取 Azure Embedder 配置字典"""
-        model_id = id if id else cls.AZURE_EMBEDDER_DEPLOYMENT
+    def get_siliconflow_embedder_config(cls, id=None) -> dict:
+        """获取 siliconflow Embedder 配置字典"""
+        model_id = id if id else cls.SILICONFLOW_EMBEDDER_MODEL_ID
         return {
             "id": model_id,
-            "api_key": cls.AZURE_EMBEDDER_OPENAI_API_KEY,
-            "api_version": cls.AZURE_EMBEDDER_OPENAI_API_VERSION,
-            "azure_endpoint": cls.AZURE_EMBEDDER_OPENAI_ENDPOINT,
+            "api_key": cls.SILICONFLOW_EMBEDDER_OPENAI_API_KEY,
+            "base_url": cls.SILICONFLOW_EMBEDDER_OPENAI_ENDPOINT,
         }
 
     @classmethod
@@ -118,15 +116,15 @@ def get_ai_model(model_id=None, model_type="deepseek") -> Model:
         return OpenAILike(**config)
 
 
-def get_azure_embedder(id=None) -> AzureOpenAIEmbedder:
+def get_siliconflow_embedder(id=None) -> OpenAILikeEmbedder:
     """
-    获取Azure Embedder实例
+    获取siliconflow Embedder实例
 
     Args:
         id: 模型ID，如不指定则使用默认配置
 
     Returns:
-        AzureOpenAIEmbedder实例
+        siliconflowOpenAIEmbedder实例
     """
-    config = Config.get_azure_embedder_config(id)
-    return AzureOpenAIEmbedder(**config)
+    config = Config.get_siliconflow_embedder_config(id)
+    return OpenAILikeEmbedder(**config)

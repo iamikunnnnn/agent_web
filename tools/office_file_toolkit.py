@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+from agno.run import RunContext
 from agno.tools import Toolkit
 from agno.tools.function import ToolResult
 
@@ -24,6 +25,7 @@ class OfficeFileToolkit(Toolkit):
                 self.resolve_input_path,
                 self.file_exists,
                 self.list_documents,
+                self.upload_to_storage,
             ],
         )
 
@@ -83,3 +85,73 @@ class OfficeFileToolkit(Toolkit):
                 indent=2,
             )
         )
+
+    def upload_to_storage(
+        self,
+        file_path: str,
+        user_id: str,
+        filename: str = "",
+        *,
+        run_context: RunContext | None = None,
+    ) -> ToolResult:
+        """
+        Upload an office output file to Qiniu cloud storage.
+
+        Args:
+            file_path: Local path to the file to upload
+            user_id: User ID for organizing storage path
+            filename: Custom filename (defaults to original file name)
+            run_context: Run context for resolving session data
+
+        Returns:
+            JSON with the remote URL and upload status
+        """
+        from pathlib import Path
+
+        # Resolve user_id from context if not provided
+        if not user_id and run_context:
+            session_state = getattr(run_context, "session_state", {}) or {}
+            user_id = session_state.get("user_id") or session_state.get("sub", "anonymous")
+
+        # Resolve file path
+        local_path = Path(file_path).expanduser().resolve()
+        if not local_path.exists():
+            return ToolResult(
+                content=json.dumps(
+                    {"success": False, "error": f"File not found: {file_path}"},
+                    ensure_ascii=False,
+                )
+            )
+
+        # Use provided filename or original
+        upload_filename = filename if filename else local_path.name
+
+        try:
+            from storage import get_qiniu_storage
+
+            storage = get_qiniu_storage()
+            remote_url = storage.upload_file(
+                module="office",
+                user_id=user_id,
+                file_path=local_path,
+                filename=upload_filename,
+            )
+
+            return ToolResult(
+                content=json.dumps(
+                    {
+                        "success": True,
+                        "local_path": str(local_path),
+                        "remote_url": remote_url,
+                        "filename": upload_filename,
+                    },
+                    ensure_ascii=False,
+                )
+            )
+        except Exception as e:
+            return ToolResult(
+                content=json.dumps(
+                    {"success": False, "error": f"Upload failed: {str(e)}"},
+                    ensure_ascii=False,
+                )
+            )

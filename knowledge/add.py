@@ -1,6 +1,6 @@
 from config.db_config import create_knowledge
-from reader import get_reader
-from chunk import Chunk
+from knowledge.reader import get_reader
+from knowledge.chunk import Chunk
 
 def save_to_knowledge_base(agent_id: str,) -> str:
     """

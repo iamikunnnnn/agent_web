@@ -147,13 +147,10 @@ app = agent_os.get_app()
 _dedupe_operation_ids()
 app.openapi_schema = None
 
-if _is_app_jwt_auth_enabled():
-    from auth.middleware import JWTMiddleware
+from auth.middleware import JWTMiddleware
 
-    app.add_middleware(JWTMiddleware)
-    log_info("已启用 Supabase JWT 鉴权中间件")
-else:
-    log_info("应用层 JWT 鉴权已禁用")
+app.add_middleware(JWTMiddleware)
+log_info("已注册认证中间件")
 
 # Register knowledge base router
 from api.knowledge_router import knowledge_router

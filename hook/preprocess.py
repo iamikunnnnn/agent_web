@@ -5,6 +5,7 @@ from pathlib import Path
 
 from agno.run.agent import RunInput
 from agno.utils.log import logger
+from storage import get_qiniu_storage
 
 WORKSPACE_ROOT = Path(os.getenv("DATA_UPLOAD_DIR", Path(__file__).resolve().parents[1] / "user_cache" / "workspace"))
 
@@ -66,8 +67,10 @@ def preprocess_hook(run_input: RunInput):
     target_dir.mkdir(parents=True, exist_ok=True)
 
     file_paths: list[str] = []
+    file_urls: list[str] = []
 
     if run_input.files:
+        storage = get_qiniu_storage()
         for file in run_input.files:
             file_name = (
                 getattr(file, "name", None)
@@ -75,16 +78,30 @@ def preprocess_hook(run_input: RunInput):
                 or f"upload_{uuid.uuid4().hex[:8]}"
             )
 
+            # Save to local temporary path for immediate processing
             dest_path = target_dir / file_name
-
             with open(dest_path, "wb") as f:
                 f.write(file.content)
             logger.info(f"文件已保存: user_id={user_id}, path={dest_path}")
 
+            # Upload to Qiniu for long-term storage
+            try:
+                file_url = storage.upload_file(
+                    module="data",
+                    user_id=user_id,
+                    file_path=dest_path,
+                    filename=file_name
+                )
+                logger.info(f"文件已上传到七牛云: user_id={user_id}, url={file_url}")
+                file_urls.append(file_url)
+            except Exception as exc:
+                logger.error(f"上传文件到七牛云失败，使用本地路径: {exc}")
+                file_urls.append(str(dest_path))
+
             file.filepath = str(dest_path)
 
             try:
-                _save_to_db(user_id, str(dest_path))
+                _save_to_db(user_id, file_urls[-1])
             except RuntimeError as exc:
                 logger.error(f"写入数据映射失败，已跳过: {exc}")
 
@@ -94,11 +111,12 @@ def preprocess_hook(run_input: RunInput):
 
     if file_paths:
         result_lines = [f"成功接收 {len(file_paths)} 个文件：\n"]
-        for path in file_paths:
+        for path, url in zip(file_paths, file_urls):
             size_mb = os.path.getsize(path) / (1024 * 1024)
             result_lines.append(
                 f"{os.path.basename(path)}\n"
-                f"   路径: {path}\n"
+                f"   本地路径: {path}\n"
+                f"   云存储URL: {url}\n"
                 f"   大小: {size_mb:.2f} MB\n"
             )
 

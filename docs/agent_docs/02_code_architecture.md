@@ -142,7 +142,7 @@
 - SiliconFlow/OpenAI-like 模型配置
 - Azure embedder 配置
 - `get_ai_model()`
-- `get_azure_embedder()`
+- `get_siliconflow_embedder()`
 
 ### 5.2 `config/db_config.py`
 

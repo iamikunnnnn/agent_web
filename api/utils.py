@@ -41,7 +41,7 @@ def set_default_config_to_agent(agent: Agent):
         if not agent.model or (type(agent.model).__name__ == "OpenAIChat" and agent.model.id == "gpt-4o"):
             agent.model = get_ai_model()
         agent.memory_manager = agent.memory_manager or MemoryManager(
-            model=get_ai_model(model_type="siliconflow"),
+            model=get_ai_model(model_type="deepseek"),
             db=agent.db,
             debug_mode=False,
         )

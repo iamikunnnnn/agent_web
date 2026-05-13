@@ -3,7 +3,7 @@ Knowledge Base Management API Router
 
 Provides endpoints for managing user knowledge bases with multi-tenant isolation.
 """
-
+from agno.utils.log import logger
 from typing import List, Optional
 from datetime import datetime
 from pathlib import Path
@@ -35,7 +35,6 @@ from auth.knowledge_db import (
     get_kb_copies,
 )
 from config.db_config import Config, create_knowledge_vector, create_knowledge
-from config.model_config import get_azure_embedder
 
 from models.knowledge import (
     KnowledgeBaseCreate,
@@ -51,9 +50,12 @@ from models.knowledge import (
 
 knowledge_router = APIRouter(prefix="/knowledge", tags=["knowledge"])
 
-# File storage directory
-KNOWLEDGE_STORAGE_DIR = Path("./user_cache/knowledge")
-KNOWLEDGE_STORAGE_DIR.mkdir(parents=True, exist_ok=True)
+# Storage
+from storage import get_qiniu_storage
+
+# Temporary directory for processing files
+TEMP_PROCESSING_DIR = Path("./user_cache/knowledge_temp")
+TEMP_PROCESSING_DIR.mkdir(parents=True, exist_ok=True)
 
 
 # ============ Knowledge Base CRUD ============
@@ -334,29 +336,34 @@ async def upload_file_to_knowledge_base(
     if file_ext not in allowed_extensions:
         raise HTTPException(status_code=400, detail=f"Unsupported file type: {file_ext}")
 
-    # Generate file ID and storage path
+    # Generate file ID
     file_id = str(uuid.uuid4())
-    safe_kb_id = kb_id.replace("-", "_")
-    kb_storage_dir = KNOWLEDGE_STORAGE_DIR / safe_kb_id
-    kb_storage_dir.mkdir(parents=True, exist_ok=True)
-    file_path = kb_storage_dir / f"{file_id}{file_ext}"
 
-    # Save file
+    # Read file content
+    file_size = 0
+    content = b""
+    while chunk := await file.read(8192):
+        content += chunk
+        file_size += len(chunk)
+
+    # Upload to Qiniu
     try:
-        file_size = 0
-        async with aiofiles.open(file_path, 'wb') as f:
-            while content := await file.read(8192):
-                await f.write(content)
-                file_size += len(content)
+        storage = get_qiniu_storage()
+        file_url = storage.upload_content(
+            module="knowledge",
+            user_id=current_user.user_id,
+            content=content,
+            filename=f"{file_id}{file_ext}"
+        )
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Failed to save file: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Failed to upload file to storage: {str(e)}")
 
     # Create file record in database
     file_record = create_file_record(
         file_id=file_id,
         kb_id=kb_id,
         file_name=file.filename,
-        file_path=str(file_path),
+        file_path=file_url,  # Store URL instead of local path
         file_size=file_size,
         file_type=file_ext[1:],  # Remove the dot
     )
@@ -483,9 +490,10 @@ async def delete_file(
         if kb.owner_id != current_user.user_id:
             raise HTTPException(status_code=403, detail="Not authorized to delete this file")
 
-    # Delete file from disk
+    # Delete file from storage
     try:
-        Path(file_record.file_path).unlink(missing_ok=True)
+        storage = get_qiniu_storage()
+        storage.delete_file(file_record.file_path)
     except Exception as e:
         # Log error but continue
         pass

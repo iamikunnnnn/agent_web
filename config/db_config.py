@@ -10,7 +10,7 @@ from agno.vectordb.search import SearchType
 from dotenv import load_dotenv
 
 from agno.knowledge.reranker.cohere import CohereReranker
-from config.model_config import get_azure_embedder
+from config.model_config import get_siliconflow_embedder
 
 # 加载环境变量
 load_dotenv()
@@ -107,7 +107,7 @@ def create_knowledge_vector(id: str, **kwargs) -> VectorDb:
                         schema=Config.DB_NAME,
                         db_url=get_db_url(id=id),
                         search_type=SearchType.vector,
-                        embedder=get_azure_embedder(),
+                        embedder=get_siliconflow_embedder(),
                         # 全文或混合搜索时才有用，而且需要在PostgreSQL中安装`pg_jieba`之类的中文分词扩展
                         # content_language= "chinese",
                         auto_upgrade_schema=True,

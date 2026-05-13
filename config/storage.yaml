@@ -1,0 +1,15 @@
+qiniu:
+  bucket_name: ${QINIU_BUCKET_NAME}
+  domain: ${QINIU_DOMAIN}
+  access_key: ${QINIU_ACCESS_KEY}
+  secret_key: ${QINIU_SECRET_KEY}
+
+path_prefixes:
+  knowledge: "knowledge"
+  data: "data"
+  office: "office"
+
+expiration:
+  knowledge_days: null  # 不设置过期时间
+  data_days: 5  # 5天后过期
+  office_hours: 5  # 5小时后过期

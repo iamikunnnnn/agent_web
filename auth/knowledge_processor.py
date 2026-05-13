@@ -7,8 +7,12 @@ Uses asyncio for background task processing.
 
 import asyncio
 import logging
-from typing import Dict, Set
+from typing import Dict, Set, Optional
 from datetime import datetime, timezone
+from pathlib import Path
+from urllib.parse import urlparse
+import aiohttp
+import aiofiles
 
 from auth.knowledge_db import (
     get_file_record,
@@ -23,6 +27,54 @@ from knowledge.chunk import Chunk
 from knowledge.reader import get_reader
 
 logger = logging.getLogger(__name__)
+
+# Temporary directory for processing downloaded files
+TEMP_PROCESSING_DIR = Path("./user_cache/knowledge_temp")
+TEMP_PROCESSING_DIR.mkdir(parents=True, exist_ok=True)
+
+
+async def _download_file_to_temp(url: str, file_id: str) -> Path:
+    """
+    Download file from URL to temporary directory.
+
+    Args:
+        url: File URL (Qiniu or local path)
+        file_id: File ID for naming the temp file
+
+    Returns:
+        Path to downloaded file
+    """
+    # If it's a local path, return it
+    if url.startswith("/") or url.startswith("./") or url.startswith("\\"):
+        return Path(url)
+
+    # Parse extension from URL or default to .tmp
+    parsed = urlparse(url)
+    ext = Path(parsed.path).suffix or ".tmp"
+    temp_path = TEMP_PROCESSING_DIR / f"{file_id}{ext}"
+
+    try:
+        async with aiohttp.ClientSession() as session:
+            async with session.get(url) as response:
+                response.raise_for_status()
+                async with aiofiles.open(temp_path, 'wb') as f:
+                    async for chunk in response.content.iter_chunked(8192):
+                        await f.write(chunk)
+        logger.info(f"Downloaded file from {url} to {temp_path}")
+        return temp_path
+    except Exception as e:
+        logger.error(f"Failed to download file from {url}: {e}")
+        raise
+
+
+async def _cleanup_temp_file(file_path: Optional[Path]):
+    """Clean up temporary file."""
+    if file_path and file_path.exists():
+        try:
+            file_path.unlink()
+            logger.info(f"Cleaned up temporary file: {file_path}")
+        except Exception as e:
+            logger.warning(f"Failed to cleanup temporary file {file_path}: {e}")
 
 
 class FileProcessor:
@@ -101,6 +153,8 @@ class FileProcessor:
         """Process a single file."""
         logger.info(f"Worker {worker_name} processing file {file_id}")
 
+        temp_file: Optional[Path] = None
+
         try:
             # Update status to processing
             update_file_status(file_id, "processing")
@@ -126,23 +180,29 @@ class FileProcessor:
                 description=kb.kb_description,
             )
 
+            # Download file from storage if it's a URL
+            file_path = file_record.file_path
+            if file_path.startswith("http"):
+                temp_file = await _download_file_to_temp(file_path, file_id)
+                file_path = str(temp_file)
+
             # Use FileDetector to automatically select reader and chunker based on file type
             # This ensures optimal processing for each file type without user selection
             from knowledge.file_detector import get_reader_and_chunker
             reader, chunker = get_reader_and_chunker(
-                file_record.file_path,
+                file_path,
                 chunk_size=kb.chunk_size,
                 overlap=kb.chunk_overlap,
             )
 
-            logger.info(f"Worker {worker_name} using chunker: {type(chunker).__name__} for {file_record.file_path}")
+            logger.info(f"Worker {worker_name} using chunker: {type(chunker).__name__} for {file_path}")
 
             # Update knowledge index status
             update_kb_indexing_status(kb_id, "indexing")
 
             # Insert file into knowledge base with auto-selected reader and chunker
             knowledge.insert(
-                path=file_record.file_path,
+                path=file_path,
                 reader=reader,
             )
 
@@ -160,6 +220,9 @@ class FileProcessor:
             logger.error(f"Worker {worker_name} failed to process file {file_id}: {e}", exc_info=True)
             update_file_status(file_id, "failed", error_message=str(e))
             update_kb_indexing_status(kb_id, "failed")
+        finally:
+            # Clean up temporary file
+            await _cleanup_temp_file(temp_file)
 
     async def _count_chunks(self, vector_table_name: str) -> int:
         """Count chunks in a vector table."""
