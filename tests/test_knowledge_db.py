@@ -98,6 +98,30 @@ class TestKnowledgeBaseCRUD:
         # Cleanup
         delete_knowledge_base(kb_id)
 
+    def test_create_knowledge_base_with_auto_chunking_mode(self, test_user_id):
+        """Test creating a knowledge base with persisted auto chunking mode."""
+        kb_id = str(uuid.uuid4())
+        safe_kb_id = kb_id.replace("-", "_")
+
+        kb = create_knowledge_base(
+            kb_id=kb_id,
+            kb_name="Auto Chunk KB",
+            kb_description="Test auto chunking mode",
+            owner_id=test_user_id,
+            is_official=False,
+            is_public=False,
+            vector_table_name=f"{safe_kb_id}_knowledge_vectors",
+            chunking_mode="auto",
+            chunk_size=5000,
+            chunk_overlap=200,
+            max_results=10,
+        )
+
+        assert kb.kb_id == kb_id
+        assert kb.chunking_mode == "auto"
+
+        delete_knowledge_base(kb_id)
+
     def test_get_knowledge_base(self, test_kb_id):
         """Test getting a knowledge base by ID."""
         kb = get_knowledge_base(test_kb_id)

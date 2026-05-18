@@ -3,7 +3,7 @@ from dataclasses import dataclass, field
 
 @dataclass(frozen=True)
 class TokenPayload:
-    """Supabase JWT decoded payload."""
+    """Historical JWT payload model kept for backward compatibility."""
     sub: str
     email: str
     role: str
@@ -14,7 +14,7 @@ class TokenPayload:
 
 @dataclass(frozen=True)
 class CurrentUser:
-    """Written to request.state by JWTMiddleware."""
+    """Written to request.state by AuthMiddleware."""
     user_id: str
     email: str
     scopes: list[str] = field(default_factory=list)

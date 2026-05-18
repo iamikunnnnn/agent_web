@@ -153,21 +153,57 @@ services:  # 定义所有要启动的服务/容器
     networks:  # 网络配置
       - agent_backend  # 加入 agent_backend 网络
 
+  frontend-adapter:  # 前端 adapter 服务，供统一网关转发 /api 和 /agui
+    build:
+      context: ../agent-web-fronted-2
+      dockerfile: Dockerfile.adapter
+    environment:
+      NODE_ENV: production
+      SERVICE_BASE_URL: http://gateway/backend
+      SERVICE_ADAPTER_PORT: "4000"
+      SERVICE_ADAPTER_SQLITE_PATH: /data/copilotkit-runtime.sqlite
+    expose:
+      - "4000"
+    volumes:
+      - agent_frontend_adapter_data:/data
+    depends_on:
+      app:
+        condition: service_healthy
+    healthcheck:
+      test:
+        - CMD
+        - node
+        - -e
+        - fetch("http://127.0.0.1:4000/health").then((response)=>process.exit(response.ok?0:1)).catch(()=>process.exit(1))
+      interval: 15s
+      timeout: 5s
+      retries: 12
+      start_period: 10s
+    restart: unless-stopped
+    networks:
+      - agent_backend
+
   gateway:  # 网关服务，一般是 Nginx/OpenResty，对外暴露 HTTP 入口
     build:  # 从源码构建 gateway 镜像
-      context: .  # 构建上下文是当前目录
-      dockerfile: deploy/nginx/Dockerfile  # 使用 deploy/nginx/Dockerfile 构建 Nginx/OpenResty 镜像
+      context: ..  # 构建上下文提升到共同父目录，便于统一打包前端静态资源
+      dockerfile: agent_web/deploy/nginx/Dockerfile  # 使用 deploy/nginx/Dockerfile 构建统一入口网关镜像
     depends_on:  # 启动依赖
       app:  # 依赖主应用
         condition: service_healthy  # 等 app 健康后再启动 gateway
+      frontend-adapter:
+        condition: service_healthy
     ports:  # 把容器端口映射到宿主机端口；这是对外暴露入口
-      - "${NGINX_HTTP_PORT:-80}:80"  # 宿主机端口优先用 NGINX_HTTP_PORT，没有就用 80；映射到容器内 80
+      - "${NGINX_HTTP_PORT:-80}:80"   # HTTP 自动重定向到 HTTPS
+      - "${NGINX_HTTPS_PORT:-443}:443" # HTTPS 主端口
     volumes:  # 挂载配置文件
       - ./deploy/nginx/nginx.conf:/usr/local/openresty/nginx/conf/nginx.conf:ro  # 把本地 nginx.conf 挂进容器；ro 表示只读
       - ./deploy/nginx/jwt_verify.lua:/etc/openresty/jwt_verify.lua:ro  # 把 JWT 校验 Lua 脚本挂进容器；只读
+      - ./deploy/nginx/ssl:/etc/nginx/ssl:ro  # SSL 证书目录，需要自行创建 cert.pem 和 key.pem
     environment:  # 给 gateway 容器注入环境变量
-      JWT_SECRET: ${SUPABASE_JWT_SECRET}  # JWT 校验密钥；来自 .env 里的 SUPABASE_JWT_SECRET
+      SUPABASE_JWT_SECRET: ${SUPABASE_JWT_SECRET}  # JWT 校验密钥；来自 .env 里的 SUPABASE_JWT_SECRET
       SUPABASE_URL: ${SUPABASE_URL}  # Supabase 地址；可供 Lua/Nginx 鉴权逻辑使用
+      SUPABASE_JWKS_URL: ${SUPABASE_JWKS_URL:-}  # 可选：显式指定 JWKS 地址；不填时按 SUPABASE_URL 推导
+      SUPABASE_JWT_AUDIENCE: ${SUPABASE_JWT_AUDIENCE:-authenticated}  # 期望 JWT audience
     healthcheck:  # gateway 健康检查
       test:  # 健康检查命令
         - CMD-SHELL  # 通过 shell 执行
@@ -187,3 +223,4 @@ networks:  # 定义 Docker 网络
 volumes:  # 定义 Docker 命名卷
   agent_user_cache:  # 用户缓存卷；保存上传文件、模型文件、Office 文件等
   agent_pg_data:  # PostgreSQL 数据卷；保存数据库真实数据
+  agent_frontend_adapter_data:  # 前端 adapter 的 sqlite 数据卷

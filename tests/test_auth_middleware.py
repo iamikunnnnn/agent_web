@@ -1,15 +1,13 @@
 import pytest
-from unittest.mock import patch
 from starlette.testclient import TestClient
 from fastapi import FastAPI, Request
-from auth.middleware import JWTMiddleware
-from auth.model import TokenPayload
+from auth.middleware import AuthMiddleware
 
 
 @pytest.fixture
 def app():
     _app = FastAPI()
-    _app.add_middleware(JWTMiddleware)
+    _app.add_middleware(AuthMiddleware)
 
     @_app.get("/health")
     async def health():
@@ -71,13 +69,16 @@ def test_protected_route_invalid_token(app):
     assert resp.status_code == 401
 
 
-def test_protected_route_valid_token(app):
-    payload = TokenPayload(sub="user-1", email="a@b.com", role="authenticated")
-
-    with patch("auth.middleware.verify_token", return_value=payload):
-        with patch("auth.middleware._sync_user_to_db"):
-            client = TestClient(app)
-            resp = client.get("/protected", headers={"Authorization": "Bearer validtoken"})
-            assert resp.status_code == 200
-            assert resp.json()["user_id"] == "user-1"
-            assert resp.json()["email"] == "a@b.com"
+def test_protected_route_gateway_headers(app):
+    client = TestClient(app)
+    resp = client.get(
+        "/protected",
+        headers={
+            "X-User-Id": "user-from-gateway",
+            "X-User-Email": "gateway@example.com",
+            "X-User-Scopes": '["kb:read"]',
+        },
+    )
+    assert resp.status_code == 200
+    assert resp.json()["user_id"] == "user-from-gateway"
+    assert resp.json()["email"] == "gateway@example.com"

@@ -81,8 +81,8 @@ async def create_user_knowledge_base(
     content_table_name = f"{safe_kb_id}_knowledge_contents"
 
     # Create database record
-    # Note: chunking_mode, chunk_size, and chunk_overlap are set to defaults
-    # The actual chunking strategy is automatically selected per file by FileDetector
+    # Note: chunking_mode persists the "auto" strategy selection, while the
+    # actual reader/chunker is still chosen per file by FileDetector at ingestion.
     kb_record = create_knowledge_base(
         kb_id=kb_id,
         kb_name=payload.name,
@@ -318,7 +318,7 @@ async def upload_file_to_knowledge_base(
 
     - Users can only upload to their own knowledge bases
     - File will be processed asynchronously
-    - Supported formats: PDF, DOCX, TXT, MD, HTML
+    - Supported formats: PDF, DOC/DOCX, TXT, MD, HTML, CSV
     """
     kb = get_knowledge_base(kb_id)
     if not kb:
@@ -331,7 +331,7 @@ async def upload_file_to_knowledge_base(
         raise HTTPException(status_code=403, detail="Not authorized to modify this knowledge base")
 
     # Validate file type
-    allowed_extensions = {'.pdf', '.docx', '.txt', '.md', '.html', '.htm', '.csv'}
+    allowed_extensions = {'.pdf', '.doc', '.docx', '.txt', '.md', '.html', '.htm', '.csv'}
     file_ext = Path(file.filename).suffix.lower()
     if file_ext not in allowed_extensions:
         raise HTTPException(status_code=400, detail=f"Unsupported file type: {file_ext}")

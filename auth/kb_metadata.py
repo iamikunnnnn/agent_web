@@ -8,7 +8,7 @@ import psycopg
 from dataclasses import dataclass
 from typing import List, Optional
 from datetime import datetime, timezone
-from config.db_config import get_psycopg_db_url
+from config.db_config import get_psycopg_db_url, Config
 
 
 @dataclass

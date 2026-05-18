@@ -54,7 +54,7 @@ CREATE TABLE IF NOT EXISTS auth.knowledge_bases (
     updated_at         TIMESTAMPTZ NOT NULL DEFAULT NOW(),
 
     CONSTRAINT uk_owner_name UNIQUE (owner_id, kb_name),
-    CONSTRAINT valid_chunking_mode CHECK (chunking_mode IN ('fixed', 'semantic', 'document')),
+    CONSTRAINT valid_chunking_mode CHECK (chunking_mode IN ('fixed', 'semantic', 'document', 'auto')),
     CONSTRAINT valid_indexing_status CHECK (indexing_status IN ('idle', 'indexing', 'failed'))
 );
 
@@ -62,10 +62,16 @@ CREATE INDEX IF NOT EXISTS idx_knowledge_bases_owner_id ON auth.knowledge_bases(
 CREATE INDEX IF NOT EXISTS idx_knowledge_bases_is_official ON auth.knowledge_bases(is_official) WHERE is_official = TRUE;
 CREATE INDEX IF NOT EXISTS idx_knowledge_bases_is_public ON auth.knowledge_bases(is_public) WHERE is_public = TRUE;
 
+-- Keep existing deployments in sync when the allowed chunking modes evolve.
+ALTER TABLE IF EXISTS auth.knowledge_bases
+    DROP CONSTRAINT IF EXISTS valid_chunking_mode;
+ALTER TABLE IF EXISTS auth.knowledge_bases
+    ADD CONSTRAINT valid_chunking_mode CHECK (chunking_mode IN ('fixed', 'semantic', 'document', 'auto'));
+
 -- Knowledge Files Table
 CREATE TABLE IF NOT EXISTS auth.knowledge_files (
     file_id            UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    kb_id              UUID NOT NULL REFERENCES auth.knowledge_bases(kb_id) ON DELETE CASCADE,
+    kb_id              TEXT NOT NULL REFERENCES auth.knowledge_bases(kb_id) ON DELETE CASCADE,
 
     file_name          TEXT NOT NULL,
     file_path          TEXT NOT NULL,
@@ -89,8 +95,8 @@ CREATE INDEX IF NOT EXISTS idx_knowledge_files_status ON auth.knowledge_files(pr
 -- Knowledge Copies Table
 CREATE TABLE IF NOT EXISTS auth.knowledge_copies (
     copy_id            UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    source_kb_id       UUID NOT NULL REFERENCES auth.knowledge_bases(kb_id) ON DELETE CASCADE,
-    target_kb_id       UUID NOT NULL REFERENCES auth.knowledge_bases(kb_id) ON DELETE CASCADE,
+    source_kb_id       TEXT NOT NULL REFERENCES auth.knowledge_bases(kb_id) ON DELETE CASCADE,
+    target_kb_id       TEXT NOT NULL REFERENCES auth.knowledge_bases(kb_id) ON DELETE CASCADE,
     copied_at          TIMESTAMPTZ NOT NULL DEFAULT NOW(),
 
     CONSTRAINT unique_copy UNIQUE (source_kb_id, target_kb_id)
@@ -98,6 +104,37 @@ CREATE TABLE IF NOT EXISTS auth.knowledge_copies (
 
 CREATE INDEX IF NOT EXISTS idx_knowledge_copies_source ON auth.knowledge_copies(source_kb_id);
 CREATE INDEX IF NOT EXISTS idx_knowledge_copies_target ON auth.knowledge_copies(target_kb_id);
+
+-- Keep existing deployments in sync with the current TEXT-based KB identifiers.
+ALTER TABLE IF EXISTS auth.knowledge_copies
+    DROP CONSTRAINT IF EXISTS knowledge_copies_source_kb_id_fkey;
+ALTER TABLE IF EXISTS auth.knowledge_copies
+    DROP CONSTRAINT IF EXISTS knowledge_copies_target_kb_id_fkey;
+ALTER TABLE IF EXISTS auth.knowledge_files
+    DROP CONSTRAINT IF EXISTS knowledge_files_kb_id_fkey;
+ALTER TABLE IF EXISTS auth.knowledge_copies
+    DROP CONSTRAINT IF EXISTS unique_copy;
+
+ALTER TABLE IF EXISTS auth.knowledge_bases
+    ALTER COLUMN kb_id TYPE TEXT USING kb_id::text;
+ALTER TABLE IF EXISTS auth.knowledge_files
+    ALTER COLUMN kb_id TYPE TEXT USING kb_id::text;
+ALTER TABLE IF EXISTS auth.knowledge_copies
+    ALTER COLUMN source_kb_id TYPE TEXT USING source_kb_id::text;
+ALTER TABLE IF EXISTS auth.knowledge_copies
+    ALTER COLUMN target_kb_id TYPE TEXT USING target_kb_id::text;
+
+ALTER TABLE IF EXISTS auth.knowledge_files
+    ADD CONSTRAINT knowledge_files_kb_id_fkey
+    FOREIGN KEY (kb_id) REFERENCES auth.knowledge_bases(kb_id) ON DELETE CASCADE;
+ALTER TABLE IF EXISTS auth.knowledge_copies
+    ADD CONSTRAINT knowledge_copies_source_kb_id_fkey
+    FOREIGN KEY (source_kb_id) REFERENCES auth.knowledge_bases(kb_id) ON DELETE CASCADE;
+ALTER TABLE IF EXISTS auth.knowledge_copies
+    ADD CONSTRAINT knowledge_copies_target_kb_id_fkey
+    FOREIGN KEY (target_kb_id) REFERENCES auth.knowledge_bases(kb_id) ON DELETE CASCADE;
+ALTER TABLE IF EXISTS auth.knowledge_copies
+    ADD CONSTRAINT unique_copy UNIQUE (source_kb_id, target_kb_id);
 
 -- Function to update updated_at timestamp
 CREATE OR REPLACE FUNCTION auth.update_knowledge_bases_updated_at()

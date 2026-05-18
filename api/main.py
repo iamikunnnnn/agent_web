@@ -45,24 +45,18 @@ def _setup_tracing() -> None:
         log_info(f"OTLP tracing 初始化失败，已跳过: {exc}")
 
 
-def _is_app_jwt_auth_enabled() -> bool:
-    return _get_bool_env("ENABLE_APP_JWT_AUTH", True)
-
-
-def _init_auth_db() -> None:
+def _init_knowledge_db() -> None:
     try:
         import psycopg
-        from auth.user_db import create_user_table
-        from auth.kb_metadata import create_knowledge_tables
+        from auth.user_db import create_knowledge_tables
         from config.db_config import get_psycopg_db_url
 
-        db_url = get_psycopg_db_url(id="auth-init")
+        db_url = get_psycopg_db_url(id="knowledge-init")
         with psycopg.connect(db_url) as conn:
-            create_user_table(conn)
             create_knowledge_tables(conn)
-        log_info("认证用户表和知识库表初始化完成")
+        log_info("知识库表初始化完成")
     except Exception as exc:
-        log_info(f"认证用户表初始化已跳过，数据库暂不可用: {exc}")
+        log_info(f"知识库表初始化已跳过，数据库暂不可用: {exc}")
 
 
 def _dedupe_operation_ids() -> None:
@@ -85,17 +79,11 @@ def _dedupe_operation_ids() -> None:
 
 @asynccontextmanager
 async def lifespan(app):
-    from auth.auth_config import AuthConfig
     from knowledge.processor import start_file_processor, stop_file_processor
     from auth.official_kb import ensure_default_official_kbs
 
     log_info("开始启动 Agent 服务")
-    if _is_app_jwt_auth_enabled():
-        AuthConfig.validate()
-        log_info("Supabase 鉴权配置校验通过")
-        _init_auth_db()
-    else:
-        log_info("已关闭应用层 JWT 鉴权，跳过 Supabase 配置校验和本地认证表初始化")
+    _init_knowledge_db()
 
     # Start file processor
     try:
@@ -148,10 +136,10 @@ app = agent_os.get_app()
 _dedupe_operation_ids()
 app.openapi_schema = None
 
-from auth.middleware import JWTMiddleware
+from auth.middleware import AuthMiddleware
 
-app.add_middleware(JWTMiddleware)
-log_info("已注册认证中间件")
+app.add_middleware(AuthMiddleware)
+log_info("已注册网关认证中间件")
 
 # Register knowledge base router
 from api.knowledge_router import knowledge_router

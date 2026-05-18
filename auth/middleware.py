@@ -1,15 +1,12 @@
 from __future__ import annotations
 
 import json
-import os
-from typing import Optional
 
 from fastapi import Request
 from fastapi.responses import JSONResponse
 from agno.utils.log import logger
 from starlette.middleware.base import BaseHTTPMiddleware
 
-from auth.permissions import get_current_user
 from auth.model import CurrentUser
 
 PUBLIC_PATHS: frozenset[str] = frozenset({
@@ -66,17 +63,20 @@ class AuthMiddleware(BaseHTTPMiddleware):
         if not user_id:
             return JSONResponse(status_code=401, content={"detail": "未通过网关认证"})
 
-        email = request.headers.get("X-User-Email", "")
-        scopes_raw = request.headers.get("X-User-Scopes", "[]")
-        scopes = _normalize_scopes(scopes_raw)
-
-        # 4. Inject user info into request.state
-        current_user = CurrentUser(user_id=user_id, email=email, scopes=scopes)
+        current_user = _build_current_user(
+            user_id=user_id,
+            email=request.headers.get("X-User-Email", ""),
+            scopes_raw=request.headers.get("X-User-Scopes", "[]"),
+        )
         request.state.user = current_user
         request.state.user_id = current_user.user_id
 
         logger.info(f"网关鉴权通过: user_id={user_id} path={path}")
         return await call_next(request)
+
+
+def _build_current_user(*, user_id: str, email: str, scopes_raw: str) -> CurrentUser:
+    return CurrentUser(user_id=user_id, email=email, scopes=_normalize_scopes(scopes_raw))
 
 
 def _normalize_scopes(scopes_raw: str) -> list[str]:
@@ -95,5 +95,3 @@ def _normalize_scopes(scopes_raw: str) -> list[str]:
 
     return [str(scope) for scope in parsed if scope is not None]
 
-
-JWTMiddleware = AuthMiddleware

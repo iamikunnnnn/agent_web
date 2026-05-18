@@ -94,8 +94,8 @@ def create_knowledge_vector(id: str, **kwargs) -> VectorDb:
     Returns:
         VectorDb 实例 (PgVector or Milvus)
     """
-    # 内联生成 table_name
-    table_name = f"{id}_knowledge_vectors"
+    # 允许调用方显式覆盖 table_name，避免和默认命名重复传参
+    table_name = kwargs.pop("table_name", f"{id}_knowledge_vectors")
 
     if Config.VECTOR_DB_TYPE.lower() == "lightrag":
         from agno.vectordb.lightrag import LightRag

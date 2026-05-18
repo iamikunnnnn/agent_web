@@ -1,8 +1,11 @@
 from agno.agent import Agent
 from agno.memory import MemoryManager
+from agno.agent import Agent
+from agno.tools.duckduckgo import DuckDuckGoTools
 
 from config.db_config import create_base_db
 from config.model_config import get_ai_model
+
 
 def _process_agent_tool_entrypoints(agent: Agent):
     """Process entrypoints for all agent tools to extract descriptions from docstrings."""
@@ -55,6 +58,7 @@ def set_default_config_to_agent(agent: Agent):
         # 似乎开启这个以后，用户每轮消息都会被写入记忆。
         agent.enable_agentic_memory = True
         agent.store_history_messages=False
+
         # 每轮对话之后进行记忆
         # agent.enable_user_memories = True
         # agent.search_knowledge = True  # Disabled, using tools instead
@@ -66,5 +70,8 @@ def set_default_config_to_agent(agent: Agent):
 
         # Process tool entrypoints to ensure descriptions are extracted from docstrings
         _process_agent_tool_entrypoints(agent)
+
+        # 批量添加工具
+        agent.tools.extend([DuckDuckGoTools(),])
     else:
         return agent
